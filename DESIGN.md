@@ -7,8 +7,8 @@
 
 ## Current Phase
 
-**Phase 1 — Foundation** — Milestone 1.1 (Scaffolding) complete except the deferred Flutter
-task; moving to **Milestone 1.2 — Authentication**.
+**Phase 1 — Foundation** — Milestone 1.1 (Scaffolding) complete except deferred Flutter;
+**Milestone 1.2 — Authentication** in progress (backend-first; Flutter parts deferred).
 
 > **1.1.3 (Flutter) is deferred** — the Flutter SDK isn't installed on this machine.
 > Backend/infra tasks were reordered ahead of it (see Design Decision 8). Flutter resumes
@@ -50,7 +50,7 @@ for now (mirroring `MyBill.md` §13) and will be broken into tasks as we approac
 
 | #     | Task                                                                                                | Status                                                                |
 | ----- | --------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
-| 1.2.1 | Supabase client setup (backend `supabase-py` client + Flutter `supabase_flutter` client)            | ⬜ Pending                                                            |
+| 1.2.1 | Supabase client setup (backend `supabase-py` client + Flutter `supabase_flutter` client)            | 🟢 Backend done; Flutter half deferred (SDK)                          |
 | 1.2.2 | JWT verification middleware (FastAPI dependency, validates Supabase-issued JWT on protected routes) | ⬜ Pending                                                            |
 | 1.2.3 | User profile sync (on first authenticated request, ensure a row exists in `users`)                  | 🟡 DB half done (auth trigger in 1.1.4); app-layer safety-net pending |
 | 1.2.4 | Flutter: auth state (Riverpod notifier) + secure token persistence (`flutter_secure_storage`)       | ⬜ Pending                                                            |
