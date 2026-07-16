@@ -7,7 +7,7 @@
 
 ## Current Phase
 
-**Phase 1 — Foundation**, Milestone 1.1 — Project Scaffolding
+**Phase 1 — Foundation**, Milestone 1.1 — Project Scaffolding (task 1.1.3 next)
 
 ---
 
@@ -35,7 +35,7 @@ for now (mirroring `MyBill.md` §13) and will be broken into tasks as we approac
 | # | Task | Status |
 |---|---|---|
 | 1.1.1 | Create root folder structure (`backend/`, `mobile/`, `infra/`, `docs/`, `.github/workflows/`) + `.gitignore` + root `README.md` | ✅ Done |
-| 1.1.2 | Configure FastAPI project (dependency management, app factory, settings, structured logging, `/health` endpoint) | ⬜ Pending |
+| 1.1.2 | Configure FastAPI project (dependency management, app factory, settings, structured logging, `/health` endpoint) | ✅ Done |
 | 1.1.3 | Configure Flutter project (`flutter create`, Riverpod + GoRouter + Freezed deps, lint config, folder skeleton per `MyBill.md` §7) | ⬜ Pending |
 | 1.1.4 | Configure Supabase project (Auth enabled, `users` table + RLS, `receipts` Storage bucket + policy) | ⬜ Pending |
 | 1.1.5 | Docker Compose for local dev (`api`, `worker`, `redis`) | ⬜ Pending |
@@ -114,11 +114,36 @@ for now (mirroring `MyBill.md` §13) and will be broken into tasks as we approac
   Python/Flutter/Docker/editor artifacts, and root `README.md` pointing to this file and
   to `MyBill.md`.
 
+- **1.1.2 — Configure FastAPI project** (2026-07-16)
+  Backend now boots and serves `GET /v1/health`. Delivered:
+  - `pyproject.toml` — `uv`-managed, Python 3.12+, minimal runtime deps (fastapi, uvicorn,
+    pydantic, pydantic-settings) + dev group (pytest, httpx, ruff, mypy). Ruff (strict rule
+    set) + mypy (`strict = true`) + pytest all configured here.
+  - `app/main.py` — `create_app()` factory (re-buildable in tests) + ASGI `app`, with CORS,
+    request-context middleware, exception handlers, versioned router mount, and a lifespan
+    hook reserved for future DB/Redis pools.
+  - `app/core/config.py` — `Settings` (pydantic-settings) + cached `get_settings()`.
+  - `app/core/logging.py` — structured logging, JSON in prod / console locally, `request_id`
+    `ContextVar` stamped on every line; PII-free by contract.
+  - `app/core/middleware.py` — `RequestContextMiddleware`: per-request id (reused from
+    inbound `X-Request-ID` or generated), access logging, id echoed to response + logs.
+  - `app/core/responses.py` — standard envelope (`success()` / `error()`, `ApiResponse[T]`).
+  - `app/core/exceptions.py` — `AppError` hierarchy (`NotFound`/`Unauthorized`/`Forbidden`)
+    + handlers rendering every failure through the envelope; 500s logged, never leaked.
+  - `app/api/deps.py` — `SettingsDep` reads settings off `app.state` (not the global) so
+    test overrides propagate.
+  - `app/api/v1/router.py` + `routes/health.py` — `GET /v1/health`.
+  - `tests/` — 4 passing smoke tests (envelope shape, request-id generation/reuse, 404
+    envelope). Verified live: `uvicorn` boots, `/v1/health` returns 200 with correct
+    envelope + `x-request-id` header, `/docs` + `/openapi.json` served in non-prod.
+  - `.env.example`, `backend/README.md`.
+  Quality gates green: `ruff check`, `ruff format --check`, `mypy app` (strict), `pytest`.
+
 ---
 
 ## Pending Tasks
 
-Next up: **1.1.2 — Configure FastAPI project**. See full Phase 1 task list above.
+Next up: **1.1.3 — Configure Flutter project**. See full Phase 1 task list above.
 
 ---
 
@@ -149,7 +174,27 @@ Next up: **1.1.2 — Configure FastAPI project**. See full Phase 1 task list abo
    placeholder *code* — it will be deleted the moment real content (e.g. `backend/app/main.py`)
    lands in that directory in task 1.1.2.
 
-5. **OCR provider, LLM provider, and other Phase 2/6 technology choices are deliberately
+5. **Backend dependency management via `uv`, dependencies declared incrementally.**
+   `uv` is already installed on this machine (0.5.9); it's fast and lockfile-based.
+   Only the deps actually used *now* are declared — SQLAlchemy, Alembic, supabase-py,
+   Celery, Redis, Pillow, python-jose, httpx (runtime) are added by the tasks that
+   introduce them. **Why:** declaring unused deps bloats installs/CI and invites version
+   drift on packages we haven't yet exercised. `MyBill.md` §3 remains the target dep set.
+
+6. **`Settings` injected via a FastAPI dependency (`SettingsDep`), not read from the
+   cached global inside handlers.** The global `get_settings()` still exists (and is the
+   default the ASGI `app` is built with), but handlers pull settings off
+   `request.app.state.settings`. **Why:** the `create_app(settings=...)` factory lets tests
+   build an app with overridden settings; if handlers read the cached global instead, those
+   overrides silently don't apply (caught in this task — the health test initially reported
+   `development` instead of `test`). This also gives DB session / Supabase client the same
+   clean injection point later.
+
+7. **PEP 695 type parameter syntax** (`class ApiResponse[T]`, `def success[T]`) for
+   generics, targeting Python 3.12. **Why:** it's the modern idiom Ruff enforces at
+   `target-version = py312`, and pydantic v2.13 supports it for generic models.
+
+8. **OCR provider, LLM provider, and other Phase 2/6 technology choices are deliberately
    deferred**, not decided now.
    **Why:** `MyBill.md` already designs these behind swappable interfaces
    (`OCRProvider`, `ReceiptParser`, `LLMProvider`); picking a concrete implementation before
@@ -163,24 +208,42 @@ Next up: **1.1.2 — Configure FastAPI project**. See full Phase 1 task list abo
 ```
 MyBill/
 ├── .github/
-│   └── workflows/        # CI pipelines (empty — task 1.1.6)
-├── backend/               # FastAPI service (empty — task 1.1.2)
-├── mobile/                # Flutter app (empty — task 1.1.3)
+│   └── workflows/            # CI pipelines (empty — task 1.1.6)
+├── backend/                   # FastAPI service
+│   ├── app/
+│   │   ├── main.py            # create_app() factory + ASGI app
+│   │   ├── core/             # config, logging, middleware, responses, exceptions
+│   │   └── api/
+│   │       ├── deps.py       # SettingsDep (+ future DB/Supabase deps)
+│   │       └── v1/
+│   │           ├── router.py
+│   │           └── routes/health.py
+│   ├── tests/                # conftest + test_health
+│   ├── pyproject.toml
+│   ├── .env.example
+│   └── README.md
+├── mobile/                    # Flutter app (empty — task 1.1.3)
 ├── infra/
 │   └── supabase/
-│       └── migrations/    # SQL migrations (empty — task 1.1.4)
-├── docs/                  # Supplementary docs (empty)
+│       └── migrations/        # SQL migrations (empty — task 1.1.4)
+├── docs/                      # Supplementary docs (empty)
 ├── .gitignore
 ├── README.md
-├── MyBill.md               # Architecture & product spec (source doc)
-└── DESIGN.md               # This file
+├── MyBill.md                   # Architecture & product spec (source doc)
+└── DESIGN.md                   # This file
 ```
 
 ---
 
 ## APIs Implemented
 
-None yet. First endpoint (`POST /v1/receipts/upload`) targeted at task 1.3.3.
+| Method | Path | Status | Notes |
+|---|---|---|---|
+| `GET` | `/v1/health` | ✅ Live | Liveness check; always 200 when process is up. Readiness (`/health/ready`, checks DB/Redis) to follow. |
+
+First data endpoint (`POST /v1/receipts/upload`) targeted at task 1.3.3.
+
+All responses use the standard envelope from `MyBill.md` §5 via `app.core.responses`.
 
 ---
 
@@ -194,12 +257,19 @@ No tables created yet. Full schema (`users`, `stores`, `receipts`, `receipt_item
 
 ## Technical Debt
 
-None yet — project just scaffolded.
+- **Starlette `TestClient` deprecation warning** — `starlette.testclient` warns that using
+  `httpx` with it is deprecated in favour of `httpx2`. Cosmetic; tests pass. Revisit if it
+  becomes an error on a future Starlette bump.
+- **`/health` is liveness only** — no readiness probe yet. Add `/health/ready` (checks DB +
+  Redis) once those dependencies exist (Phase 1 task 1.1.4 / Phase 2).
 
 ---
 
 ## Next Recommended Task
 
-**1.1.2 — Configure FastAPI project**: dependency management (`pyproject.toml` via
-`uv`/`poetry`), app factory pattern, `Settings` (pydantic-settings) for env config,
-structured logging, and a `GET /health` endpoint, with a basic `pytest` smoke test.
+**1.1.3 — Configure Flutter project**: `flutter create` into `mobile/`, add core
+dependencies (`flutter_riverpod`, `go_router`, `freezed` + `json_serializable`, `dio`),
+configure `analysis_options.yaml` (lints) and build_runner, and lay down the
+feature-first folder skeleton from `MyBill.md` §7 (`core/`, `features/`, `shared/`) with
+a runnable app shell + a trivial widget test. (Requires the Flutter SDK — will confirm
+it's installed before starting.)
