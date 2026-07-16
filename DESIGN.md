@@ -203,12 +203,36 @@ for now (mirroring `MyBill.md` §13) and will be broken into tasks as we approac
   job's logic (build → run → curl `/v1/health` → 200 envelope) was reproduced end-to-end and
   cleaned up. (`act` isn't installed, so steps were run manually rather than in a runner.)
 
+- **1.2.1 — Supabase client setup (backend)** (2026-07-16)
+  Backend now holds a shared **service-role** async Supabase client. Delivered:
+  - `supabase>=2.10` added to `pyproject.toml` (the task that introduces the dep).
+  - `app/core/config.py` — `supabase_url` + `supabase_anon_key` / `supabase_service_role_key`
+    / `supabase_jwt_secret` (the keys as `SecretStr` so they can't leak into logs), all
+    optional so the app still boots unconfigured, plus a `supabase_configured` property.
+  - `app/integrations/supabase.py` — `create_supabase_client()`: builds the async
+    service-role client, raises a clear `RuntimeError` if unconfigured, logs readiness
+    without ever logging a secret.
+  - `app/main.py` lifespan — creates the client at startup when configured, stores it on
+    `app.state.supabase` (None otherwise).
+  - `app/api/deps.py` — `SupabaseDep` returns the client or raises 503 (`ServiceUnavailableError`,
+    added to `app/core/exceptions.py`) when unconfigured.
+  - `tests/test_supabase.py` — 6 tests (config property, factory guard, DI 503/return,
+    SecretStr masking). Full suite: 10 passed.
+
+  **Verified live:** the app's own factory, loaded from the real `.env`, connected to the
+  live project and listed storage buckets → `['receipts']` (private). The full app also boots
+  with real creds, creating the client in the lifespan (`supabase_client_created` logged, no
+  secret) with `/v1/health` responding. Quality gates green (ruff, ruff format, mypy strict,
+  pytest).
+  _Flutter `supabase_flutter` client half deferred with the SDK (1.1.3)._
+
 ---
 
 ## Pending Tasks
 
-Milestone 1.1 is complete except deferred Flutter (1.1.3). Work moves to **Milestone 1.2 —
-Authentication**, starting with **1.2.1 — Supabase client setup**. See full task list above.
+Milestone 1.1 complete (except deferred Flutter 1.1.3). In **Milestone 1.2 —
+Authentication**: 1.2.1 backend done; next is **1.2.2 — JWT verification middleware**. See
+full task list above.
 
 ---
 
@@ -307,7 +331,18 @@ Authentication**, starting with **1.2.1 — Supabase client setup**. See full ta
     (`run_tests.sh`) is not yet a CI job — recorded as tech debt. **Why:** keeps the task
     small and every step reproducible locally, matching what's actually buildable today.
 
-15. **OCR provider, LLM provider, and other Phase 2/6 technology choices are deliberately
+15. **Backend holds one shared service-role Supabase client, not per-request user-scoped
+    clients.** External-service clients live in a new `app/integrations/` package (separate
+    from `core` framework code and the `api` HTTP layer). The single client uses the
+    service-role key and is created once in the lifespan.
+    **Why:** matches `MyBill.md` §11 — "the FastAPI layer uses service-role calls only for
+    system operations" and "FastAPI enforces `user_id` scoping in every query." The app
+    filters by `user_id` explicitly; RLS is the DB-level backstop. Trade-off: service-role
+    bypasses RLS, so every query/storage path here MUST include the owner's id by hand —
+    called out in `app/integrations/supabase.py`. Keys are `SecretStr` and config is optional
+    so the app still boots (and unit tests run) unconfigured, with `SupabaseDep` returning 503.
+
+16. **OCR provider, LLM provider, and other Phase 2/6 technology choices are deliberately
     deferred**, not decided now.
     **Why:** `MyBill.md` already designs these behind swappable interfaces
     (`OCRProvider`, `ReceiptParser`, `LLMProvider`); picking a concrete implementation before
@@ -325,14 +360,15 @@ MyBill/
 │       └── ci.yml             # backend gates + Docker build smoke test
 ├── backend/                   # FastAPI service
 │   ├── app/
-│   │   ├── main.py            # create_app() factory + ASGI app
+│   │   ├── main.py            # create_app() factory + ASGI app (+ lifespan clients)
 │   │   ├── core/              # config, logging, middleware, responses, exceptions
+│   │   ├── integrations/      # external-service clients (supabase.py; OCR/LLM later)
 │   │   └── api/
-│   │       ├── deps.py        # SettingsDep (+ future DB/Supabase deps)
+│   │       ├── deps.py        # SettingsDep, SupabaseDep
 │   │       └── v1/
 │   │           ├── router.py
 │   │           └── routes/health.py
-│   ├── tests/                 # conftest + test_health
+│   ├── tests/                 # conftest + test_health + test_supabase
 │   ├── Dockerfile             # multi-stage uv image, non-root, healthcheck
 │   ├── .dockerignore
 │   ├── pyproject.toml
@@ -412,10 +448,12 @@ trigger fires and cascades correctly. DB left clean (0 rows).
 
 ## Next Recommended Task
 
-**1.2.1 — Supabase client setup**: a backend Supabase/JWT layer built on the now-live
-project. Add the runtime deps (`supabase-py` or direct `httpx`/`python-jose` for JWT
-verification — decide in the task), a `get_supabase_client()` provider wired through
-`app/api/deps.py` and the lifespan hook, and config for `SUPABASE_URL` / keys / JWKS already
-present in `.env`. Verifiable by a test that the client initialises from settings and (with a
-real token) that a protected dependency accepts a valid JWT and rejects a bad one. This is
-the foundation for 1.2.2 (JWT middleware) and every authenticated endpoint after.
+**1.2.2 — JWT verification middleware**: a FastAPI dependency (`CurrentUserDep`) that
+validates the Supabase-issued JWT on the `Authorization: Bearer` header and yields the
+authenticated user's id/claims; protected routes depend on it, unauthenticated requests get
+401 via the existing envelope. Decide verification path in the task — symmetric
+`SUPABASE_JWT_SECRET` (HS256, already in config) vs. asymmetric JWKS (`SUPABASE_JWKS_URL`,
+newer projects) — and add `python-jose`/`pyjwt` accordingly. Verifiable with unit tests
+(valid token → user id; expired/tampered/missing → 401) plus a temporary protected route
+exercised end-to-end with a real token minted from the live project. Foundation for every
+authenticated endpoint (upload, analytics, …).
