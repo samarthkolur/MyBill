@@ -20,6 +20,7 @@ from app.core.config import Settings, get_settings
 from app.core.exceptions import register_exception_handlers
 from app.core.logging import configure_logging, get_logger
 from app.core.middleware import RequestContextMiddleware
+from app.core.security import build_jwt_verifier
 from app.integrations.supabase import create_supabase_client
 
 logger = get_logger("app.main")
@@ -42,6 +43,13 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     else:
         app.state.supabase = None
         logger.warning("supabase_not_configured")
+
+    # Build the JWT verifier (needs only the Supabase URL for JWKS). None when auth is
+    # unconfigured — the CurrentUser dependency then returns 503.
+    if settings.auth_configured:
+        app.state.jwt_verifier = build_jwt_verifier(settings)
+    else:
+        app.state.jwt_verifier = None
 
     yield
 

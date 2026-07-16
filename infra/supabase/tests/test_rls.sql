@@ -111,6 +111,35 @@ begin;
   end $$;
 rollback;
 
+-- ===========================================================================
+-- Test 6 — receipts RLS: a user can insert/see only their own receipts
+-- ===========================================================================
+begin;
+  set local role authenticated;
+  set local request.jwt.claim.sub = '11111111-1111-1111-1111-111111111111';
+  do $$
+  begin
+    -- Allowed: a receipt owned by the caller.
+    insert into public.receipts (user_id, image_url)
+      values ('11111111-1111-1111-1111-111111111111', 'receipts/a/r1/original.jpg');
+
+    -- Blocked: a receipt owned by someone else.
+    begin
+      insert into public.receipts (user_id, image_url)
+        values ('22222222-2222-2222-2222-222222222222', 'receipts/b/r1/original.jpg');
+      raise exception 'Test 6 FAILED: inserting a receipt for another user was allowed';
+    exception when insufficient_privilege then
+      null;  -- expected
+    end;
+
+    assert (select count(*) from public.receipts) = 1,
+      'Test 6 FAILED: caller sees receipts other than their own';
+    assert (select status from public.receipts) = 'pending',
+      'Test 6 FAILED: new receipt did not default to status=pending';
+    raise notice 'Test 6 PASSED: receipts RLS + default status=pending';
+  end $$;
+rollback;
+
 \echo '---------------------------------------------'
 \echo 'All RLS / auth-sync assertions passed.'
 \echo '---------------------------------------------'

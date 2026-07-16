@@ -10,6 +10,8 @@ dependencies = [
     "pydantic>=2.10,<3.0",
     "pydantic-settings>=2.7,<3.0",
     "supabase>=2.10,<3.0",
+    "pyjwt[crypto]>=2.10,<3.0",
+    "python-multipart>=0.0.18,<1.0",
 ]
 
 # Additional dependencies (async SQLAlchemy, Alembic, Celery, Redis, Pillow,

@@ -64,9 +64,14 @@ class Settings(BaseSettings):
     supabase_url: str = ""
     supabase_anon_key: SecretStr = SecretStr("")
     supabase_service_role_key: SecretStr = SecretStr("")
-    # Legacy symmetric JWT signing secret — used by the JWT verification middleware
-    # (task 1.2.2). Newer projects can verify via JWKS instead.
+    # Legacy symmetric JWT signing secret. This project signs tokens with asymmetric
+    # ES256 verified via JWKS (see below), so this is kept only for HS256 fallback.
     supabase_jwt_secret: SecretStr = SecretStr("")
+    # Optional explicit JWKS URL; when empty it's derived from supabase_url. The project's
+    # access tokens are ES256, verified against the keys published here.
+    supabase_jwks_url: str = ""
+    # Expected token audience. Supabase issues `aud: "authenticated"` for logged-in users.
+    supabase_jwt_audience: str = "authenticated"
 
     @property
     def is_production(self) -> bool:
@@ -77,6 +82,24 @@ class Settings(BaseSettings):
         """True when the server-side (service-role) Supabase client can be built."""
 
         return bool(self.supabase_url and self.supabase_service_role_key.get_secret_value())
+
+    @property
+    def supabase_issuer(self) -> str:
+        """The `iss` claim Supabase stamps on tokens: ``<supabase_url>/auth/v1``."""
+
+        return f"{self.supabase_url.rstrip('/')}/auth/v1"
+
+    @property
+    def effective_jwks_url(self) -> str:
+        """JWKS endpoint to verify token signatures against (explicit or derived)."""
+
+        return self.supabase_jwks_url or f"{self.supabase_issuer}/.well-known/jwks.json"
+
+    @property
+    def auth_configured(self) -> bool:
+        """True when incoming JWTs can be verified (needs a Supabase URL)."""
+
+        return bool(self.supabase_url)
 
 
 @lru_cache(maxsize=1)
