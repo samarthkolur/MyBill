@@ -1,0 +1,28 @@
+# Keep the build context small and never bake secrets or local caches into the image.
+
+# Secrets / local config
+.env
+.env.*
+!.env.example
+
+# Python caches / virtualenvs (deps are installed fresh in the image)
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Tests are not needed in the runtime image
+tests/
+
+# VCS / editor / OS
+.git/
+.gitignore
+.idea/
+.vscode/
+*.log
+.DS_Store

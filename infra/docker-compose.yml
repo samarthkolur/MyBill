@@ -1,0 +1,75 @@
+# Local development stack for MyBill (MyBill.md §12).
+#
+# Run from this directory:  docker compose up --build
+#   - api    → FastAPI, hot-reloading, on http://localhost:8000  (GET /v1/health)
+#   - redis  → broker + cache, ready for the Celery pipeline landing in Phase 2
+#
+# The `worker` (Celery) service is defined but commented out until the Celery app exists
+# (Phase 2) — see the note at the bottom. Adding a service that can't start yet would be
+# placeholder scaffolding, so it stays disabled until it does real work.
+
+name: mybill
+
+services:
+  api:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    env_file:
+      - ../backend/.env
+    environment:
+      # Point the app at the compose-managed Redis regardless of what's in .env.
+      REDIS_URL: redis://redis:6379/0
+    ports:
+      - "8000:8000"
+    # Live reload for local dev: mount just the source package so the container's
+    # pre-built /app/.venv is NOT shadowed by the host. Override the image's production
+    # CMD with uvicorn --reload watching that mounted source.
+    volumes:
+      - ../backend/app:/app/app:ro
+    command:
+      - uvicorn
+      - app.main:app
+      - --host
+      - "0.0.0.0"
+      - --port
+      - "8000"
+      - --reload
+      - --reload-dir
+      - /app/app
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    # Not published to the host by default — only the app network needs it. Uncomment to
+    # inspect with a local redis-cli.
+    # ports:
+    #   - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # Celery worker — ENABLED IN PHASE 2, once app/worker.py (the Celery app) exists.
+  # Kept here as the documented target shape (MyBill.md §12) so wiring it up later is a
+  # matter of uncommenting + adding the OCR tasks, not redesigning the compose file.
+  # ---------------------------------------------------------------------------
+  # worker:
+  #   build:
+  #     context: ../backend
+  #     dockerfile: Dockerfile
+  #   env_file:
+  #     - ../backend/.env
+  #   environment:
+  #     REDIS_URL: redis://redis:6379/0
+  #   command: ["celery", "-A", "app.worker", "worker", "--loglevel=info"]
+  #   depends_on:
+  #     redis:
+  #       condition: service_healthy
+  #   restart: unless-stopped

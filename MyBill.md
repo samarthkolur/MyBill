@@ -35,14 +35,14 @@ The app is built mobile-first (Flutter), backed by a FastAPI service layer, and 
 
 ### Core Value Propositions
 
-| Value | Mechanism |
-|---|---|
-| Effortless capture | One-tap camera scan or gallery upload |
-| Automatic structuring | OCR → canonical JSON → database |
+| Value                 | Mechanism                                    |
+| --------------------- | -------------------------------------------- |
+| Effortless capture    | One-tap camera scan or gallery upload        |
+| Automatic structuring | OCR → canonical JSON → database              |
 | Spending intelligence | Monthly/category/store analytics with charts |
-| Price awareness | Track price changes per item over time |
-| Bill comparison | Diff any two receipts item by item |
-| AI insights (Phase 6) | Natural language Q&A on purchase history |
+| Price awareness       | Track price changes per item over time       |
+| Bill comparison       | Diff any two receipts item by item           |
+| AI insights (Phase 6) | Natural language Q&A on purchase history     |
 
 ---
 
@@ -99,44 +99,44 @@ Flutter app receives structured receipt + renders Digital Bill
 
 ### Mobile (Flutter)
 
-| Package | Role |
-|---|---|
-| `flutter_riverpod` | State management |
-| `go_router` | Declarative navigation |
-| `freezed` + `json_serializable` | Immutable models + JSON codegen |
-| `dio` | HTTP client with interceptors |
-| `camera` | Live camera capture |
-| `image_picker` | Gallery upload |
-| `fl_chart` | Analytics charts |
-| `hive` / `drift` | Local persistence / offline cache |
-| `flutter_secure_storage` | Token storage |
-| `image_cropper` | Pre-upload crop/rotate |
+| Package                         | Role                              |
+| ------------------------------- | --------------------------------- |
+| `flutter_riverpod`              | State management                  |
+| `go_router`                     | Declarative navigation            |
+| `freezed` + `json_serializable` | Immutable models + JSON codegen   |
+| `dio`                           | HTTP client with interceptors     |
+| `camera`                        | Live camera capture               |
+| `image_picker`                  | Gallery upload                    |
+| `fl_chart`                      | Analytics charts                  |
+| `hive` / `drift`                | Local persistence / offline cache |
+| `flutter_secure_storage`        | Token storage                     |
+| `image_cropper`                 | Pre-upload crop/rotate            |
 
 ### Backend (Python)
 
-| Package | Role |
-|---|---|
-| `fastapi` | API framework |
-| `uvicorn` | ASGI server |
-| `sqlalchemy` (async) | ORM |
-| `alembic` | DB migrations |
-| `pydantic v2` | Request/response validation |
-| `supabase-py` | Supabase client (auth + storage) |
-| `python-jose` | JWT verification |
-| `celery` + `redis` | Async OCR job queue |
-| `pillow` | Image pre-processing |
-| `httpx` | Async HTTP for OCR provider calls |
+| Package              | Role                              |
+| -------------------- | --------------------------------- |
+| `fastapi`            | API framework                     |
+| `uvicorn`            | ASGI server                       |
+| `sqlalchemy` (async) | ORM                               |
+| `alembic`            | DB migrations                     |
+| `pydantic v2`        | Request/response validation       |
+| `supabase-py`        | Supabase client (auth + storage)  |
+| `python-jose`        | JWT verification                  |
+| `celery` + `redis`   | Async OCR job queue               |
+| `pillow`             | Image pre-processing              |
+| `httpx`              | Async HTTP for OCR provider calls |
 
 ### Infrastructure
 
-| Service | Purpose |
-|---|---|
-| Supabase | PostgreSQL + Auth + Storage + Realtime |
-| Redis | Task queue broker + analytics cache |
-| Celery Worker | Background OCR processing |
-| Docker | Containerised services |
-| GitHub Actions | CI/CD |
-| Sentry | Error tracking |
+| Service        | Purpose                                |
+| -------------- | -------------------------------------- |
+| Supabase       | PostgreSQL + Auth + Storage + Realtime |
+| Redis          | Task queue broker + analytics cache    |
+| Celery Worker  | Background OCR processing              |
+| Docker         | Containerised services                 |
+| GitHub Actions | CI/CD                                  |
+| Sentry         | Error tracking                         |
 
 ---
 
@@ -271,58 +271,58 @@ Auth: `Authorization: Bearer <supabase_jwt>` on all endpoints.
 
 ### Receipts
 
-| Method | Path | Description |
-|---|---|---|
-| `POST` | `/receipts/upload` | Upload image, create receipt record, enqueue OCR job |
-| `GET` | `/receipts` | List receipts (paginated, filterable) |
-| `GET` | `/receipts/{id}` | Get single receipt with items |
-| `DELETE` | `/receipts/{id}` | Soft-delete receipt |
-| `GET` | `/receipts/{id}/items` | Get line items for a receipt |
-| `PATCH` | `/receipts/{id}/items/{item_id}` | Manual correction of an item |
+| Method   | Path                             | Description                                          |
+| -------- | -------------------------------- | ---------------------------------------------------- |
+| `POST`   | `/receipts/upload`               | Upload image, create receipt record, enqueue OCR job |
+| `GET`    | `/receipts`                      | List receipts (paginated, filterable)                |
+| `GET`    | `/receipts/{id}`                 | Get single receipt with items                        |
+| `DELETE` | `/receipts/{id}`                 | Soft-delete receipt                                  |
+| `GET`    | `/receipts/{id}/items`           | Get line items for a receipt                         |
+| `PATCH`  | `/receipts/{id}/items/{item_id}` | Manual correction of an item                         |
 
 ### Search
 
-| Method | Path | Description |
-|---|---|---|
-| `GET` | `/search/receipts` | Full-text search across receipts |
-| `GET` | `/search/items` | Search items by name, brand, category, store, date range, price range |
+| Method | Path               | Description                                                           |
+| ------ | ------------------ | --------------------------------------------------------------------- |
+| `GET`  | `/search/receipts` | Full-text search across receipts                                      |
+| `GET`  | `/search/items`    | Search items by name, brand, category, store, date range, price range |
 
 ### Analytics
 
-| Method | Path | Description |
-|---|---|---|
-| `GET` | `/analytics/summary` | Dashboard summary (MTD spend, avg basket, top store) |
-| `GET` | `/analytics/monthly` | Monthly spend for N months |
-| `GET` | `/analytics/weekly` | Weekly breakdown |
-| `GET` | `/analytics/categories` | Spend by category for a period |
-| `GET` | `/analytics/stores` | Spend by store |
-| `GET` | `/analytics/items/top` | Most frequently purchased items |
+| Method | Path                    | Description                                          |
+| ------ | ----------------------- | ---------------------------------------------------- |
+| `GET`  | `/analytics/summary`    | Dashboard summary (MTD spend, avg basket, top store) |
+| `GET`  | `/analytics/monthly`    | Monthly spend for N months                           |
+| `GET`  | `/analytics/weekly`     | Weekly breakdown                                     |
+| `GET`  | `/analytics/categories` | Spend by category for a period                       |
+| `GET`  | `/analytics/stores`     | Spend by store                                       |
+| `GET`  | `/analytics/items/top`  | Most frequently purchased items                      |
 
 ### Price History
 
-| Method | Path | Description |
-|---|---|---|
-| `GET` | `/prices/{item_name}` | Price history for a normalised item name |
-| `GET` | `/prices/trends` | Items with biggest price changes (period param) |
+| Method | Path                  | Description                                     |
+| ------ | --------------------- | ----------------------------------------------- |
+| `GET`  | `/prices/{item_name}` | Price history for a normalised item name        |
+| `GET`  | `/prices/trends`      | Items with biggest price changes (period param) |
 
 ### Comparison
 
-| Method | Path | Description |
-|---|---|---|
+| Method | Path       | Description                                                |
+| ------ | ---------- | ---------------------------------------------------------- |
 | `POST` | `/compare` | Body: `{ receipt_a: UUID, receipt_b: UUID }` → diff result |
 
 ### OCR Job Status
 
-| Method | Path | Description |
-|---|---|---|
-| `GET` | `/receipts/{id}/status` | Poll OCR processing status |
+| Method | Path                    | Description                |
+| ------ | ----------------------- | -------------------------- |
+| `GET`  | `/receipts/{id}/status` | Poll OCR processing status |
 
 ### Standard Response Envelope
 
 ```json
 {
   "success": true,
-  "data": { },
+  "data": {},
   "meta": {
     "page": 1,
     "total": 42,
@@ -359,6 +359,7 @@ class OCRProvider(Protocol):
 ```
 
 `OCRResult` contains:
+
 - Raw text
 - Bounding boxes per word/line
 - Per-word confidence scores
@@ -398,10 +399,10 @@ Parser responsibilities:
   "time": "18:42",
   "payment_method": "UPI",
   "totals": {
-    "subtotal": 1240.00,
-    "tax": 62.00,
-    "discount": 50.00,
-    "total": 1252.00
+    "subtotal": 1240.0,
+    "tax": 62.0,
+    "discount": 50.0,
+    "total": 1252.0
   },
   "items": [
     {
@@ -411,8 +412,8 @@ Parser responsibilities:
       "category": "Dairy",
       "quantity": 2,
       "unit": "L",
-      "unit_price": 62.00,
-      "total_price": 124.00,
+      "unit_price": 62.0,
+      "total_price": 124.0,
       "ocr_confidence": 0.97
     }
   ],
@@ -433,12 +434,12 @@ After parsing, the normalisation layer runs before DB insert:
 
 ### Failure Handling
 
-| Failure | Behaviour |
-|---|---|
-| OCR provider timeout | Retry ×3 with exponential backoff, then mark `status = failed` |
+| Failure               | Behaviour                                                             |
+| --------------------- | --------------------------------------------------------------------- |
+| OCR provider timeout  | Retry ×3 with exponential backoff, then mark `status = failed`        |
 | Low confidence (<0.6) | Mark receipt as `needs_review`, surface to user for manual correction |
-| Parse exception | Log full traceback, store raw OCR JSON, mark `status = failed` |
-| Missing total | Accept partial parse, flag field as `null`, alert user |
+| Parse exception       | Log full traceback, store raw OCR JSON, mark `status = failed`        |
+| Missing total         | Accept partial parse, flag field as `null`, alert user                |
 
 ### Celery Task Graph
 
@@ -510,18 +511,18 @@ class BillsNotifier extends _$BillsNotifier {
 
 ### Key Screens
 
-| Screen | Purpose |
-|---|---|
-| **Dashboard** | MTD spend, recent bills, quick-scan FAB |
-| **Scan** | Camera viewfinder with capture button + gallery button |
-| **Processing** | Animated status screen polling `/receipts/{id}/status` |
-| **Bill Detail** | Full digital receipt with item list, totals, store info |
-| **Bill List** | Paginated, sortable, filterable list of all receipts |
-| **Analytics** | Tab bar: Monthly · Category · Store · Items |
-| **Compare** | Pick two bills → animated diff view |
-| **Search** | Unified search with facet filters |
-| **Price History** | Line chart of a product's price over time |
-| **Settings** | Currency, export (JSON/PDF), account |
+| Screen            | Purpose                                                 |
+| ----------------- | ------------------------------------------------------- |
+| **Dashboard**     | MTD spend, recent bills, quick-scan FAB                 |
+| **Scan**          | Camera viewfinder with capture button + gallery button  |
+| **Processing**    | Animated status screen polling `/receipts/{id}/status`  |
+| **Bill Detail**   | Full digital receipt with item list, totals, store info |
+| **Bill List**     | Paginated, sortable, filterable list of all receipts    |
+| **Analytics**     | Tab bar: Monthly · Category · Store · Items             |
+| **Compare**       | Pick two bills → animated diff view                     |
+| **Search**        | Unified search with facet filters                       |
+| **Price History** | Line chart of a product's price over time               |
+| **Settings**      | Currency, export (JSON/PDF), account                    |
 
 ### Offline Strategy
 
@@ -538,17 +539,17 @@ Analytics are computed server-side, cached in `analytics_cache`, and invalidated
 
 ### Metrics
 
-| Metric | Computation |
-|---|---|
-| Monthly spend | `SUM(total)` WHERE `date_trunc('month', date) = target_month` |
-| Weekly spend | `SUM(total)` WHERE `date_trunc('week', date) = target_week` |
-| Average basket value | `AVG(total)` over trailing 30 days |
-| Category breakdown | `SUM(total_price)` per category, current month |
-| Top purchased items | `COUNT(*)` + `SUM(total_price)` per `name_normalised`, trailing 90 days |
-| Price trend (item) | `unit_price` time series from `price_history` |
-| Store comparison | `AVG(total)` + `COUNT(*)` per store, trailing 90 days |
-| Inflation estimate | Average unit price change for basket of top-20 items, MoM |
-| Savings | `SUM(discount)` per period |
+| Metric               | Computation                                                             |
+| -------------------- | ----------------------------------------------------------------------- |
+| Monthly spend        | `SUM(total)` WHERE `date_trunc('month', date) = target_month`           |
+| Weekly spend         | `SUM(total)` WHERE `date_trunc('week', date) = target_week`             |
+| Average basket value | `AVG(total)` over trailing 30 days                                      |
+| Category breakdown   | `SUM(total_price)` per category, current month                          |
+| Top purchased items  | `COUNT(*)` + `SUM(total_price)` per `name_normalised`, trailing 90 days |
+| Price trend (item)   | `unit_price` time series from `price_history`                           |
+| Store comparison     | `AVG(total)` + `COUNT(*)` per store, trailing 90 days                   |
+| Inflation estimate   | Average unit price change for basket of top-20 items, MoM               |
+| Savings              | `SUM(discount)` per period                                              |
 
 ### Cache Invalidation
 
@@ -556,13 +557,13 @@ On every successful receipt insert, enqueue `invalidate_analytics_cache_task` wh
 
 ### Chart Types (fl_chart)
 
-| View | Chart |
-|---|---|
-| Monthly spend | Bar chart (12 months) |
-| Category breakdown | Donut chart |
-| Price history | Line chart with data points |
-| Weekly spend | Bar chart (8 weeks) |
-| Store comparison | Horizontal bar chart |
+| View               | Chart                       |
+| ------------------ | --------------------------- |
+| Monthly spend      | Bar chart (12 months)       |
+| Category breakdown | Donut chart                 |
+| Price history      | Line chart with data points |
+| Weekly spend       | Bar chart (8 weeks)         |
+| Store comparison   | Horizontal bar chart        |
 
 ---
 
@@ -594,21 +595,34 @@ Two receipt IDs. The engine fetches all items for each.
 
 ```json
 {
-  "receipt_a": { "id": "...", "date": "2025-05-10", "store": "DMart", "total": 1200 },
-  "receipt_b": { "id": "...", "date": "2025-06-15", "store": "DMart", "total": 1320 },
+  "receipt_a": {
+    "id": "...",
+    "date": "2025-05-10",
+    "store": "DMart",
+    "total": 1200
+  },
+  "receipt_b": {
+    "id": "...",
+    "date": "2025-06-15",
+    "store": "DMart",
+    "total": 1320
+  },
   "total_delta": 120,
   "total_delta_pct": 10.0,
   "items": {
     "common": [
       {
         "name": "Amul Taaza Full Cream Milk 1L",
-        "qty_a": 2, "qty_b": 2,
-        "price_a": 62.00, "price_b": 68.00,
-        "price_delta": 6.00, "price_delta_pct": 9.68
+        "qty_a": 2,
+        "qty_b": 2,
+        "price_a": 62.0,
+        "price_b": 68.0,
+        "price_delta": 6.0,
+        "price_delta_pct": 9.68
       }
     ],
-    "added": [ { "name": "Fortune Sunflower Oil 1L", "total_price": 145.00 } ],
-    "removed": [ { "name": "Lay's Classic Salted 26g", "total_price": 20.00 } ]
+    "added": [{ "name": "Fortune Sunflower Oil 1L", "total_price": 145.0 }],
+    "removed": [{ "name": "Lay's Classic Salted 26g", "total_price": 20.0 }]
   },
   "category_delta": {
     "Dairy": { "a": 250, "b": 310, "delta": 60 }
@@ -628,22 +642,22 @@ A dedicated `AIService` in FastAPI exposes endpoints that take user context (pur
 
 ### Planned Capabilities
 
-| Feature | Approach |
-|---|---|
-| Natural language Q&A | RAG over receipt data + LLM |
-| Budget prediction | Time-series model on monthly spend |
-| Restock reminders | Purchase frequency → predicted next purchase date |
-| Duplicate detection | Embedding similarity on item names |
-| Cheapest store recommendation | Compare price history by item across stores |
-| Shopping list generation | Recurring items approaching restock date |
-| Meal insights | Cluster items into meal patterns |
+| Feature                       | Approach                                          |
+| ----------------------------- | ------------------------------------------------- |
+| Natural language Q&A          | RAG over receipt data + LLM                       |
+| Budget prediction             | Time-series model on monthly spend                |
+| Restock reminders             | Purchase frequency → predicted next purchase date |
+| Duplicate detection           | Embedding similarity on item names                |
+| Cheapest store recommendation | Compare price history by item across stores       |
+| Shopping list generation      | Recurring items approaching restock date          |
+| Meal insights                 | Cluster items into meal patterns                  |
 
 ### Example Q&A Queries
 
-- *"What became more expensive in June?"* → price trend diff, current month vs prior
-- *"Which products did I stop buying?"* → items present >3 times then absent >60 days
-- *"Compare June vs July spending."* → monthly analytics diff
-- *"Show all milk purchases."* → filtered item history
+- _"What became more expensive in June?"_ → price trend diff, current month vs prior
+- _"Which products did I stop buying?"_ → items present >3 times then absent >60 days
+- _"Compare June vs July spending."_ → monthly analytics diff
+- _"Show all milk purchases."_ → filtered item history
 
 ---
 
@@ -682,11 +696,11 @@ A dedicated `AIService` in FastAPI exposes endpoints that take user context (pur
 
 ### Environments
 
-| Env | Purpose |
-|---|---|
+| Env           | Purpose                                                 |
+| ------------- | ------------------------------------------------------- |
 | `development` | Local Docker Compose (FastAPI + Redis + local Supabase) |
-| `staging` | Mirrors production; auto-deployed from `main` branch |
-| `production` | Live environment |
+| `staging`     | Mirrors production; auto-deployed from `main` branch    |
+| `production`  | Live environment                                        |
 
 ### Docker Compose (development)
 
@@ -712,11 +726,13 @@ services:
 ### CI/CD (GitHub Actions)
 
 **On every PR:**
+
 - `ruff` lint + `mypy` type check (backend)
 - `flutter analyze` + `flutter test` (frontend)
 - Docker build smoke test
 
 **On merge to `main`:**
+
 - Run full test suite
 - Build and push Docker image to registry
 - Deploy to staging via SSH/ECS/Fly.io action
@@ -725,12 +741,12 @@ services:
 
 ### Monitoring
 
-| Tool | What it monitors |
-|---|---|
-| Sentry | Backend exceptions, Flutter crash reports |
+| Tool               | What it monitors                            |
+| ------------------ | ------------------------------------------- |
+| Sentry             | Backend exceptions, Flutter crash reports   |
 | Supabase Dashboard | DB performance, slow queries, storage usage |
-| Celery Flower | Task queue depth, failure rate |
-| Uptime robot | `/health` endpoint uptime |
+| Celery Flower      | Task queue depth, failure rate              |
+| Uptime robot       | `/health` endpoint uptime                   |
 
 ### Backups
 
@@ -851,20 +867,20 @@ services:
 
 ### Backend
 
-| Type | Tool | Coverage target |
-|---|---|---|
-| Unit (parser, normaliser) | `pytest` | 90% on core modules |
-| Integration (endpoints) | `pytest` + `httpx` + test DB | All happy paths + key error paths |
-| OCR pipeline | Golden-set of 50 real receipt images with known output | Parser accuracy ≥ 85% |
-| Load | `locust` | 100 concurrent uploads without degradation |
+| Type                      | Tool                                                   | Coverage target                            |
+| ------------------------- | ------------------------------------------------------ | ------------------------------------------ |
+| Unit (parser, normaliser) | `pytest`                                               | 90% on core modules                        |
+| Integration (endpoints)   | `pytest` + `httpx` + test DB                           | All happy paths + key error paths          |
+| OCR pipeline              | Golden-set of 50 real receipt images with known output | Parser accuracy ≥ 85%                      |
+| Load                      | `locust`                                               | 100 concurrent uploads without degradation |
 
 ### Flutter
 
-| Type | Tool |
-|---|---|
-| Unit (models, providers) | `flutter_test` |
-| Widget tests | `flutter_test` + `golden_toolkit` |
-| Integration | `integration_test` package + emulator |
+| Type                     | Tool                                  |
+| ------------------------ | ------------------------------------- |
+| Unit (models, providers) | `flutter_test`                        |
+| Widget tests             | `flutter_test` + `golden_toolkit`     |
+| Integration              | `integration_test` package + emulator |
 
 ### Data Quality
 
@@ -884,13 +900,13 @@ Maintain a **golden receipt dataset**: 100 receipts with hand-verified canonical
 
 ### Targets
 
-| Metric | Target |
-|---|---|
+| Metric                      | Target             |
+| --------------------------- | ------------------ |
 | Receipt upload to processed | < 30 seconds (P95) |
-| Dashboard load (cached) | < 500ms |
-| Bill list (first page) | < 800ms |
-| Search response | < 1 second |
-| API error rate | < 0.1% |
+| Dashboard load (cached)     | < 500ms            |
+| Bill list (first page)      | < 800ms            |
+| Search response             | < 1 second         |
+| API error rate              | < 0.1%             |
 
 ### Optimisations
 
@@ -914,17 +930,17 @@ The current architecture scales vertically (bigger Supabase plan + more Celery w
 
 ## 16. Risk Register
 
-| Risk | Likelihood | Impact | Mitigation |
-|---|---|---|---|
-| OCR accuracy poor on crumpled/faded receipts | High | High | Image pre-processing; manual correction UI; low-confidence flagging |
-| OCR provider cost overrun | Medium | High | Rate limit uploads; compress images; cache OCR results; evaluate cheaper providers |
-| Product name normalisation mismatches | High | Medium | Fuzzy matching; user corrections feed back into alias table |
-| Supabase free-tier limits hit | Medium | Medium | Monitor usage; upgrade plan proactively; archive old analytics |
-| Flutter state complexity grows unmanageable | Medium | Medium | Strict Riverpod layering from day one; code reviews gate provider sprawl |
-| AI layer hallucinations in Q&A | Medium | Medium | Ground responses in structured data; show source receipts; add disclaimer |
-| App rejected from app stores | Low | High | Follow Play Store / App Store guidelines; avoid storing sensitive financial data without disclosure |
-| Receipt image contains PII beyond scope | Low | Medium | Store images only in user-scoped private bucket; never expose raw URLs publicly |
+| Risk                                         | Likelihood | Impact | Mitigation                                                                                          |
+| -------------------------------------------- | ---------- | ------ | --------------------------------------------------------------------------------------------------- |
+| OCR accuracy poor on crumpled/faded receipts | High       | High   | Image pre-processing; manual correction UI; low-confidence flagging                                 |
+| OCR provider cost overrun                    | Medium     | High   | Rate limit uploads; compress images; cache OCR results; evaluate cheaper providers                  |
+| Product name normalisation mismatches        | High       | Medium | Fuzzy matching; user corrections feed back into alias table                                         |
+| Supabase free-tier limits hit                | Medium     | Medium | Monitor usage; upgrade plan proactively; archive old analytics                                      |
+| Flutter state complexity grows unmanageable  | Medium     | Medium | Strict Riverpod layering from day one; code reviews gate provider sprawl                            |
+| AI layer hallucinations in Q&A               | Medium     | Medium | Ground responses in structured data; show source receipts; add disclaimer                           |
+| App rejected from app stores                 | Low        | High   | Follow Play Store / App Store guidelines; avoid storing sensitive financial data without disclosure |
+| Receipt image contains PII beyond scope      | Low        | Medium | Store images only in user-scoped private bucket; never expose raw URLs publicly                     |
 
 ---
 
-*This document is the single source of truth for the Grocery Bill Intelligence App production build. Update it as decisions are made and phases are completed.*
+_This document is the single source of truth for the Grocery Bill Intelligence App production build. Update it as decisions are made and phases are completed._

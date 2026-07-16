@@ -1,0 +1,54 @@
+# Pre-commit hooks, run by prek (https://github.com/j178/prek).
+#
+# The formatters AUTO-FIX on `git commit` (ruff --fix, ruff format, prettier
+# --write). When a hook rewrites a file it aborts that commit so you can review
+# and re-stage the changes, then commit again — the second commit passes clean.
+# mypy is check-only (types can't be auto-fixed). Run manually with
+# `prek run --all-files`.
+#
+# Install once per clone:  prek install
+default_install_hook_types: [pre-commit]
+default_stages: [pre-commit]
+
+repos:
+  # --- Python: lint / format / typecheck (backend/, via uv) -----------------
+  - repo: local
+    hooks:
+      - id: ruff-lint
+        name: ruff · lint (fix)
+        entry: uv run --project backend ruff check --fix
+        language: system
+        types_or: [python, pyi]
+        files: ^backend/
+
+      - id: ruff-format
+        name: ruff · format (write)
+        entry: uv run --project backend ruff format
+        language: system
+        types_or: [python, pyi]
+        files: ^backend/
+
+      - id: mypy
+        name: mypy · typecheck
+        # Run on the whole package: strict mode + the pydantic plugin need the
+        # full project context, not one changed file at a time.
+        entry: bash -c 'cd backend && uv run mypy app'
+        language: system
+        types_or: [python, pyi]
+        files: ^backend/
+        pass_filenames: false
+
+  # --- Prettier: auto-format config/docs (YAML, JSON, Markdown) --------------
+  # prek provisions the Node toolchain + prettier, so no local Node install is
+  # needed. --write rewrites files in place; prek re-checks and aborts the
+  # commit if anything changed, so you re-stage and commit again.
+  - repo: local
+    hooks:
+      - id: prettier
+        name: prettier · format (write)
+        entry: prettier --write
+        language: node
+        additional_dependencies: ["prettier@3.6.2"]
+        types_or: [yaml, json, markdown]
+        # Generated/lock files are not ours to format.
+        exclude: ^backend/uv\.lock$

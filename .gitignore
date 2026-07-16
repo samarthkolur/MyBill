@@ -4,6 +4,7 @@
 !.env.example
 *.pem
 *.key
+pwd.txt
 
 # ---- Python (backend/) ----
 __pycache__/
