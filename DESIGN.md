@@ -7,8 +7,10 @@
 
 ## Current Phase
 
-**Phase 1 — Foundation** — Milestone 1.1 (Scaffolding) complete except deferred Flutter;
-**Milestone 1.2 — Authentication** in progress (backend-first; Flutter parts deferred).
+**Phase 1 — Foundation** — **all backend work complete and verified** across Milestones
+1.1–1.3. The only remaining Phase 1 tasks are Flutter (deferred until the SDK is installed):
+auth screens/state/guards (1.2.4–1.2.9), camera/scan + client-side image prep (1.3.1–1.3.2),
+and the mobile upload wiring (1.3.5). The backend is ready for **Phase 2 — OCR Pipeline**.
 
 > **1.1.3 (Flutter) is deferred** — the Flutter SDK isn't installed on this machine.
 > Backend/infra tasks were reordered ahead of it (see Design Decision 8). Flutter resumes
@@ -48,27 +50,27 @@ for now (mirroring `MyBill.md` §13) and will be broken into tasks as we approac
 
 ### Milestone 1.2 — Authentication
 
-| #     | Task                                                                                                | Status                                                                |
-| ----- | --------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
-| 1.2.1 | Supabase client setup (backend `supabase-py` client + Flutter `supabase_flutter` client)            | 🟢 Backend done; Flutter half deferred (SDK)                          |
-| 1.2.2 | JWT verification middleware (FastAPI dependency, validates Supabase-issued JWT on protected routes) | ⬜ Pending                                                            |
-| 1.2.3 | User profile sync (on first authenticated request, ensure a row exists in `users`)                  | 🟡 DB half done (auth trigger in 1.1.4); app-layer safety-net pending |
-| 1.2.4 | Flutter: auth state (Riverpod notifier) + secure token persistence (`flutter_secure_storage`)       | ⬜ Pending                                                            |
-| 1.2.5 | Flutter: Login screen                                                                               | ⬜ Pending                                                            |
-| 1.2.6 | Flutter: Sign Up screen                                                                             | ⬜ Pending                                                            |
-| 1.2.7 | Flutter: Forgot Password screen                                                                     | ⬜ Pending                                                            |
-| 1.2.8 | GoRouter route guards (redirect unauthenticated users to login)                                     | ⬜ Pending                                                            |
-| 1.2.9 | Logout flow (clear token, revoke Supabase session, redirect)                                        | ⬜ Pending                                                            |
+| #     | Task                                                                                                | Status                                       |
+| ----- | --------------------------------------------------------------------------------------------------- | -------------------------------------------- |
+| 1.2.1 | Supabase client setup (backend `supabase-py` client + Flutter `supabase_flutter` client)            | 🟢 Backend done; Flutter half deferred (SDK) |
+| 1.2.2 | JWT verification middleware (FastAPI dependency, validates Supabase-issued JWT on protected routes) | ✅ Done (ES256 via JWKS)                     |
+| 1.2.3 | User profile sync (on first authenticated request, ensure a row exists in `users`)                  | ✅ Done (DB trigger + app-layer safety-net)  |
+| 1.2.4 | Flutter: auth state (Riverpod notifier) + secure token persistence (`flutter_secure_storage`)       | ⏸️ Deferred (Flutter SDK)                    |
+| 1.2.5 | Flutter: Login screen                                                                               | ⏸️ Deferred (Flutter SDK)                    |
+| 1.2.6 | Flutter: Sign Up screen                                                                             | ⏸️ Deferred (Flutter SDK)                    |
+| 1.2.7 | Flutter: Forgot Password screen                                                                     | ⏸️ Deferred (Flutter SDK)                    |
+| 1.2.8 | GoRouter route guards (redirect unauthenticated users to login)                                     | ⏸️ Deferred (Flutter SDK)                    |
+| 1.2.9 | Logout flow (clear token, revoke Supabase session, redirect)                                        | ⏸️ Deferred (Flutter SDK)                    |
 
 ### Milestone 1.3 — Camera & Upload
 
-| #     | Task                                                                                              | Status     |
-| ----- | ------------------------------------------------------------------------------------------------- | ---------- |
-| 1.3.1 | Flutter: Scan screen — camera capture + gallery picker                                            | ⬜ Pending |
-| 1.3.2 | Flutter: pre-upload crop/rotate (`image_cropper`) + client-side compression (≤2MB, quality 85%)   | ⬜ Pending |
-| 1.3.3 | Backend: `POST /v1/receipts/upload` — stores image in Supabase Storage (`receipts/{user_id}/...`) | ⬜ Pending |
-| 1.3.4 | Backend: create `receipts` row with `status = pending` on upload                                  | ⬜ Pending |
-| 1.3.5 | Flutter: wire upload flow end-to-end + progress UI, persisted upload queue for offline retry      | ⬜ Pending |
+| #     | Task                                                                                              | Status                    |
+| ----- | ------------------------------------------------------------------------------------------------- | ------------------------- |
+| 1.3.1 | Flutter: Scan screen — camera capture + gallery picker                                            | ⏸️ Deferred (Flutter SDK) |
+| 1.3.2 | Flutter: pre-upload crop/rotate (`image_cropper`) + client-side compression (≤2MB, quality 85%)   | ⏸️ Deferred (Flutter SDK) |
+| 1.3.3 | Backend: `POST /v1/receipts/upload` — stores image in Supabase Storage (`receipts/{user_id}/...`) | ✅ Done                   |
+| 1.3.4 | Backend: create `receipts` row with `status = pending` on upload                                  | ✅ Done                   |
+| 1.3.5 | Flutter: wire upload flow end-to-end + progress UI, persisted upload queue for offline retry      | ⏸️ Deferred (Flutter SDK) |
 
 **Phase 1 exit criteria** (from `MyBill.md`): user can register, log in, photograph a receipt, and see it uploaded.
 
@@ -226,13 +228,56 @@ for now (mirroring `MyBill.md` §13) and will be broken into tasks as we approac
   pytest).
   _Flutter `supabase_flutter` client half deferred with the SDK (1.1.3)._
 
+- **1.2.2 — JWT verification middleware** (2026-07-16)
+  Protected routes now require a valid Supabase access token. The project signs tokens with
+  **asymmetric ES256** (confirmed by inspecting a real token + the JWKS endpoint), so:
+  - `pyjwt[crypto]` added; `app/core/security.py` — `JwtVerifier` fetches/caches the project
+    JWKS (`PyJWKClient`) and validates signature, `exp`, issuer (`<url>/auth/v1`), and
+    audience (`authenticated`), pinned to ES256 (algorithm-confusion defence). Returns an
+    `AuthenticatedUser` (id/email/role/claims). Config gained JWKS-URL/issuer/audience props.
+  - Verifier built once in the lifespan (None when unconfigured); `app/api/deps.py` —
+    `CurrentUserDep` extracts the bearer token (via `HTTPBearer`, off-loop verify) → 401 on
+    missing/invalid, 503 when auth unconfigured.
+  - `GET /v1/auth/me` (`routes/auth.py`) — first protected endpoint.
+  - `tests/test_auth.py` — 11 hermetic tests (local ES256 keypair, stubbed JWKS): valid,
+    expired, wrong issuer/audience, wrong key, missing/non-UUID sub, endpoint 200/401/503.
+    **Verified live** against the running app + real project: minted a real token →
+    `/v1/auth/me` 200 with correct id; missing/garbage → 401. Test user cleaned up.
+
+- **1.2.3 — User profile sync (app-layer safety-net)** (2026-07-16)
+  Established the Router→Service→Repository layering (`MyBill.md` §2) and completed profile
+  sync. `app/repositories/users.py` (`UserRepository`), `app/services/users.py`
+  (`UserService.ensure_profile` — returns the profile, upserting it if the DB signup trigger
+  somehow didn't), `app/schemas/user.py` (`UserProfile`). `GET /v1/auth/me` now ensures +
+  returns the real DB profile. `tests/test_users.py` — 5 tests (existing→no write,
+  missing→provision, metadata name extraction). **Verified live:** `/v1/auth/me` returns the
+  trigger-created profile with `full_name` from metadata + `INR`/`Asia/Kolkata` defaults.
+
+- **1.3.3 / 1.3.4 — Receipt upload endpoint + pending row** (2026-07-16)
+  `POST /v1/receipts/upload` (auth-required) validates the image, stores the original in the
+  private `receipts` bucket under `{user_id}/{receipt_id}/original.<ext>`, and inserts a
+  `status=pending` receipt row; OCR (Phase 2) fills the rest. Delivered:
+  - New migration `…093000_stores_and_receipts` — `stores` + `receipts` tables, both with
+    RLS (`enable+force`, `for all` policy on `auth.uid()=user_id`), grants, `updated_at`
+    triggers, indexes, and a `status` CHECK. `receipts.date`/`total` are NULLABLE
+    (deviation from §4 — a pending receipt has neither until OCR; see decision 18). Applied
+    live + a 6th RLS assertion added to `tests/test_rls.sql` (all pass locally).
+  - `python-multipart` added; `schemas/receipt.py`, `repositories/receipts.py`,
+    `services/receipts.py` (validation → 415/413, storage upload, orphan-object cleanup on
+    DB failure), `routes/receipts.py`, `ReceiptServiceDep`.
+  - `tests/test_receipts.py` — 7 tests (415/413 validation, happy path stores+creates,
+    cleanup-on-failure, endpoint 401). Full suite: **32 passed**.
+    **Verified live** end-to-end: real token → upload 201 pending; DB row present under the
+    owner's folder; storage object present; PDF → 415; no token → 401. Project left clean.
+
 ---
 
 ## Pending Tasks
 
-Milestone 1.1 complete (except deferred Flutter 1.1.3). In **Milestone 1.2 —
-Authentication**: 1.2.1 backend done; next is **1.2.2 — JWT verification middleware**. See
-full task list above.
+**All Phase 1 backend work is done.** Remaining Phase 1 tasks are Flutter-only and deferred
+until the SDK is installed (auth UI 1.2.4–1.2.9; scan/crop 1.3.1–1.3.2; upload wiring 1.3.5).
+The backend is ready for **Phase 2 — OCR Pipeline** (awaiting go-ahead per the phase
+boundary). See full task list above.
 
 ---
 
@@ -342,7 +387,35 @@ full task list above.
     called out in `app/integrations/supabase.py`. Keys are `SecretStr` and config is optional
     so the app still boots (and unit tests run) unconfigured, with `SupabaseDep` returning 503.
 
-16. **OCR provider, LLM provider, and other Phase 2/6 technology choices are deliberately
+16. **JWT verification uses asymmetric ES256 via JWKS, not the legacy HS256 shared secret.**
+    Inspecting a real access token showed `alg: ES256` with a `kid` resolving to the
+    project's JWKS endpoint. So `JwtVerifier` validates against the published public keys
+    (PyJWT `PyJWKClient`, cached), pinned to `["ES256"]` to prevent algorithm confusion, and
+    checks issuer + audience + expiry. **Why:** it's how this project actually signs tokens;
+    JWKS also rotates keys without a redeploy. `SUPABASE_JWT_SECRET` (HS256) is kept in config
+    as an unused fallback only. The (cached, occasional-network) verify runs in a threadpool
+    so it never blocks the event loop.
+
+17. **Backend layered as Router → Service → Repository** (`MyBill.md` §2), with
+    `app/schemas/` (Pydantic models), `app/repositories/` (Supabase data access, one per
+    table), `app/services/` (business logic), and routes staying in `app/api/v1/routes/`.
+    **Why:** keeps HTTP, business rules, and data access independently testable — services
+    are unit-tested against fake repositories with no network. Deps.py wires each service to
+    the shared client.
+
+18. **`receipts.date` and `receipts.total` are nullable, deviating from `MyBill.md` §4
+    (NOT NULL).** A receipt is created at upload time as `status=pending` with only the image;
+    the parsed date and total don't exist until OCR runs. **Why:** enforcing NOT NULL would
+    make the upload→pending→parse flow impossible. They're expected non-null once
+    `status='done'` (a future CHECK/validation can enforce that conditionally).
+
+19. **`receipts.image_url` stores the Storage object key, not a public/signed URL.** Upload
+    writes `{user_id}/{receipt_id}/original.<ext>` and stores that key. **Why:** the bucket is
+    private and signed URLs expire (§11), so persisting a URL would rot; short-lived signed
+    URLs are minted on read (Phase 3). The upload also deletes the orphaned object if the DB
+    insert fails, so Storage and DB don't drift.
+
+20. **OCR provider, LLM provider, and other Phase 2/6 technology choices are deliberately
     deferred**, not decided now.
     **Why:** `MyBill.md` already designs these behind swappable interfaces
     (`OCRProvider`, `ReceiptParser`, `LLMProvider`); picking a concrete implementation before
@@ -361,14 +434,17 @@ MyBill/
 ├── backend/                   # FastAPI service
 │   ├── app/
 │   │   ├── main.py            # create_app() factory + ASGI app (+ lifespan clients)
-│   │   ├── core/              # config, logging, middleware, responses, exceptions
+│   │   ├── core/              # config, logging, middleware, responses, exceptions, security
 │   │   ├── integrations/      # external-service clients (supabase.py; OCR/LLM later)
+│   │   ├── schemas/           # Pydantic models (user, receipt)
+│   │   ├── repositories/      # Supabase data access (users, receipts)
+│   │   ├── services/          # business logic (users, receipts)
 │   │   └── api/
-│   │       ├── deps.py        # SettingsDep, SupabaseDep
+│   │       ├── deps.py        # Settings/Supabase/CurrentUser/UserService/ReceiptService deps
 │   │       └── v1/
 │   │           ├── router.py
-│   │           └── routes/health.py
-│   ├── tests/                 # conftest + test_health + test_supabase
+│   │           └── routes/    # health, auth (/me), receipts (/upload)
+│   ├── tests/                 # health, supabase, auth, users, receipts
 │   ├── Dockerfile             # multi-stage uv image, non-root, healthcheck
 │   ├── .dockerignore
 │   ├── pyproject.toml
@@ -378,8 +454,8 @@ MyBill/
 ├── infra/
 │   ├── docker-compose.yml     # local dev stack: api + redis (worker: Phase 2)
 │   └── supabase/
-│       ├── migrations/        # 4 idempotent SQL migrations (users, auth-sync, storage)
-│       ├── tests/             # harness.sql + test_rls.sql + run_tests.sh (local verify)
+│       ├── migrations/        # 5 idempotent migrations (users, auth-sync, storage, stores+receipts)
+│       ├── tests/             # harness.sql + test_rls.sql (6 assertions) + run_tests.sh
 │       └── README.md          # Supabase setup + migration guide
 ├── docs/                      # Supplementary docs (empty)
 ├── .pre-commit-config.yaml    # prek hooks: ruff/mypy (backend) + prettier (docs), auto-fix
@@ -393,11 +469,11 @@ MyBill/
 
 ## APIs Implemented
 
-| Method | Path         | Status  | Notes                                                                                                  |
-| ------ | ------------ | ------- | ------------------------------------------------------------------------------------------------------ |
-| `GET`  | `/v1/health` | ✅ Live | Liveness check; always 200 when process is up. Readiness (`/health/ready`, checks DB/Redis) to follow. |
-
-First data endpoint (`POST /v1/receipts/upload`) targeted at task 1.3.3.
+| Method | Path                  | Auth | Status  | Notes                                                                              |
+| ------ | --------------------- | ---- | ------- | ---------------------------------------------------------------------------------- |
+| `GET`  | `/v1/health`          | no   | ✅ Live | Liveness; always 200 when up. Readiness (`/health/ready`, DB/Redis) to follow.     |
+| `GET`  | `/v1/auth/me`         | yes  | ✅ Live | Verifies the Supabase JWT; ensures + returns the caller's profile. 401 if invalid. |
+| `POST` | `/v1/receipts/upload` | yes  | ✅ Live | Multipart image → private Storage + `pending` receipt row. 415/413 on bad image.   |
 
 All responses use the standard envelope from `MyBill.md` §5 via `app.core.responses`.
 
@@ -407,21 +483,23 @@ All responses use the standard envelope from `MyBill.md` §5 via `app.core.respo
 
 Migrations live in `infra/supabase/migrations/`, verified against Postgres 16.
 
-| Table / object                                       | Status     | Migration                  |
-| ---------------------------------------------------- | ---------- | -------------------------- |
-| `public.users` (+ RLS, grants, `updated_at` trigger) | ✅ Created | `…090100_create_users`     |
-| `handle_new_user()` auth-sync trigger                | ✅ Created | `…090200_auth_user_sync`   |
-| `receipts` Storage bucket (private) + policies       | ✅ Created | `…090300_receipts_storage` |
-| `stores`                                             | ⬜ Pending | Phase 2                    |
-| `receipts`, `receipt_items`                          | ⬜ Pending | Phase 2                    |
-| `categories`                                         | ⬜ Pending | Phase 2                    |
-| `price_history`                                      | ⬜ Pending | Phase 2                    |
-| `analytics_cache`                                    | ⬜ Pending | Phase 4                    |
+| Table / object                                       | Status     | Migration                     |
+| ---------------------------------------------------- | ---------- | ----------------------------- |
+| `public.users` (+ RLS, grants, `updated_at` trigger) | ✅ Created | `…090100_create_users`        |
+| `handle_new_user()` auth-sync trigger                | ✅ Created | `…090200_auth_user_sync`      |
+| `receipts` Storage bucket (private) + policies       | ✅ Created | `…090300_receipts_storage`    |
+| `stores` (+ RLS, grants, `updated_at`)               | ✅ Created | `…093000_stores_and_receipts` |
+| `receipts` (+ RLS, grants, indexes, status CHECK)    | ✅ Created | `…093000_stores_and_receipts` |
+| `receipt_items`                                      | ⬜ Pending | Phase 2                       |
+| `categories`                                         | ⬜ Pending | Phase 2                       |
+| `price_history`                                      | ⬜ Pending | Phase 2                       |
+| `analytics_cache`                                    | ⬜ Pending | Phase 4                       |
 
 Full target schema is `MyBill.md` §4. **Applied and verified on the live Supabase project**
 (ref `fkowzsdvwqbhrjykjrcb`, region ap-south-1) on 2026-07-16 — all objects confirmed
-present, and an end-to-end admin-create→profile-row→delete test proved the auth-sync
-trigger fires and cascades correctly. DB left clean (0 rows).
+present; the auth-sync trigger and the upload→pending-receipt flow were both exercised
+end-to-end against the live DB + Storage. DB left clean (0 rows). Note `receipts.date`/`total`
+are nullable (decision 18).
 
 ---
 
@@ -438,6 +516,14 @@ trigger fires and cascades correctly. DB left clean (0 rows).
   schema grows, so applied state is tracked rather than re-run-everything.
 - **Supabase migration test not in CI** — `infra/supabase/tests/run_tests.sh` runs locally
   only; add it as a CI job (Postgres service container) so RLS regressions are caught on PRs.
+- **Upload endpoint has no rate limiting** — `MyBill.md` §11 specifies 30 uploads/hour/user
+  to cap OCR cost. Not implemented yet (needs the Redis-based limiter); add before Phase 2
+  OCR wiring makes uploads expensive.
+- **No conditional NOT NULL on parsed receipt fields** — `date`/`total` are nullable for the
+  pending state (decision 18); once OCR lands, enforce non-null when `status='done'` (CHECK
+  or app-level validation).
+- **`AuthenticatedUser.claims` typed as `dict[str, object]`** — callers needing specific
+  claims re-narrow types. Fine for now; tighten with a typed claims model if it spreads.
 - **Supabase CLI not adopted** — migrations live in `infra/supabase/migrations/`, but the
   CLI expects `supabase/migrations/`. Move/symlink when we adopt `supabase db push`
   (decision 11).
@@ -448,12 +534,17 @@ trigger fires and cascades correctly. DB left clean (0 rows).
 
 ## Next Recommended Task
 
-**1.2.2 — JWT verification middleware**: a FastAPI dependency (`CurrentUserDep`) that
-validates the Supabase-issued JWT on the `Authorization: Bearer` header and yields the
-authenticated user's id/claims; protected routes depend on it, unauthenticated requests get
-401 via the existing envelope. Decide verification path in the task — symmetric
-`SUPABASE_JWT_SECRET` (HS256, already in config) vs. asymmetric JWKS (`SUPABASE_JWKS_URL`,
-newer projects) — and add `python-jose`/`pyjwt` accordingly. Verifiable with unit tests
-(valid token → user id; expired/tampered/missing → 401) plus a temporary protected route
-exercised end-to-end with a real token minted from the live project. Foundation for every
-authenticated endpoint (upload, analytics, …).
+**Phase 1 backend is complete** — the remaining Phase 1 tasks are all Flutter and blocked on
+the SDK. Two ways forward (needs a decision at this phase boundary):
+
+1. **Install the Flutter SDK** and pick up the mobile Phase 1 work (auth screens/state/guards
+   1.2.4–1.2.9, scan + client-side image prep 1.3.1–1.3.2, upload wiring 1.3.5) so Phase 1's
+   exit criteria (register → log in → photograph → upload) can be met end-to-end.
+2. **Begin Phase 2 — OCR Pipeline** on the backend: choose the OCR provider (recommended:
+   Google Document AI), stand up Celery + Redis (compose `worker` already stubbed), define the
+   `OCRProvider`/`ReceiptParser` interfaces, and process a `pending` receipt into
+   `receipt_items` + `price_history`. The upload endpoint already produces the `pending` rows
+   this consumes.
+
+Recommendation: **Phase 2 backend** while Flutter remains blocked, since it's fully unblocked
+and builds directly on the upload flow just shipped.
