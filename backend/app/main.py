@@ -20,20 +20,31 @@ from app.core.config import Settings, get_settings
 from app.core.exceptions import register_exception_handlers
 from app.core.logging import configure_logging, get_logger
 from app.core.middleware import RequestContextMiddleware
+from app.integrations.supabase import create_supabase_client
 
 logger = get_logger("app.main")
 
 
 @asynccontextmanager
 async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
-    """Startup/shutdown hooks. Future DB/Redis pools are opened and closed here."""
+    """Startup/shutdown hooks. Shared clients/pools are opened and closed here."""
 
     settings: Settings = app.state.settings
     logger.info(
         "app_startup",
         extra={"environment": settings.environment.value, "version": __version__},
     )
+
+    # Build the shared service-role Supabase client if configured. Left as None when
+    # unconfigured (e.g. unit tests) — the SupabaseDep dependency then returns 503.
+    if settings.supabase_configured:
+        app.state.supabase = await create_supabase_client(settings)
+    else:
+        app.state.supabase = None
+        logger.warning("supabase_not_configured")
+
     yield
+
     logger.info("app_shutdown")
 
 

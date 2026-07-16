@@ -1,0 +1,83 @@
+name: CI
+
+# Runs on every PR into main and on direct pushes to main. Path filter keeps the
+# workflow from firing on changes that can't affect these gates (docs, mobile, infra).
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+# Cancel superseded runs on the same ref (e.g. a new push to an open PR).
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: Backend · lint · types · tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.5.9"
+          enable-cache: true
+          # Bust/scope the cache on lockfile changes.
+          cache-dependency-glob: backend/uv.lock
+
+      - name: Install dependencies (frozen)
+        run: uv sync --dev --frozen
+
+      - name: Ruff lint
+        run: uv run ruff check --output-format=github .
+
+      - name: Ruff format check
+        run: uv run ruff format --check .
+
+      - name: Mypy (strict)
+        run: uv run mypy app
+
+      - name: Pytest
+        run: uv run pytest
+
+  docker-build:
+    name: Backend · Docker image builds
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image (smoke test)
+        uses: docker/build-push-action@v6
+        with:
+          context: backend
+          file: backend/Dockerfile
+          push: false
+          load: true
+          tags: mybill-api:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Smoke-test the built image
+        # Boot the container and confirm /v1/health answers through it.
+        run: |
+          docker run -d --name mybill-api-ci -p 8000:8000 mybill-api:ci
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:8000/v1/health; then echo "healthy"; exit 0; fi
+            sleep 1
+          done
+          echo "health check failed"; docker logs mybill-api-ci; exit 1
+
+  # Flutter jobs (flutter analyze / flutter test) are added here once the mobile app
+  # exists (task 1.1.3, deferred pending the Flutter SDK).

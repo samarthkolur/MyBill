@@ -11,7 +11,7 @@ from __future__ import annotations
 from enum import StrEnum
 from functools import lru_cache
 
-from pydantic import Field
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -57,9 +57,26 @@ class Settings(BaseSettings):
     # Comma-separated list of allowed origins for the mobile app / web clients.
     cors_origins: list[str] = Field(default_factory=lambda: ["*"])
 
+    # ---- Supabase ----
+    # All optional so the app still boots (and unit tests run) without Supabase
+    # configured; the client provider fails loudly if used while unconfigured.
+    # Keys are SecretStr so they can never be accidentally logged or serialised.
+    supabase_url: str = ""
+    supabase_anon_key: SecretStr = SecretStr("")
+    supabase_service_role_key: SecretStr = SecretStr("")
+    # Legacy symmetric JWT signing secret — used by the JWT verification middleware
+    # (task 1.2.2). Newer projects can verify via JWKS instead.
+    supabase_jwt_secret: SecretStr = SecretStr("")
+
     @property
     def is_production(self) -> bool:
         return self.environment == Environment.PRODUCTION
+
+    @property
+    def supabase_configured(self) -> bool:
+        """True when the server-side (service-role) Supabase client can be built."""
+
+        return bool(self.supabase_url and self.supabase_service_role_key.get_secret_value())
 
 
 @lru_cache(maxsize=1)

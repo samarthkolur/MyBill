@@ -12,8 +12,10 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import Depends, Request
+from supabase import AsyncClient
 
 from app.core.config import Settings
+from app.core.exceptions import ServiceUnavailableError
 
 
 def get_settings(request: Request) -> Settings:
@@ -24,3 +26,19 @@ def get_settings(request: Request) -> Settings:
 
 
 SettingsDep = Annotated[Settings, Depends(get_settings)]
+
+
+def get_supabase(request: Request) -> AsyncClient:
+    """Return the shared service-role Supabase client.
+
+    Raises 503 if Supabase isn't configured for this deployment, rather than failing
+    deep inside a handler with an ``AttributeError``.
+    """
+
+    client: AsyncClient | None = getattr(request.app.state, "supabase", None)
+    if client is None:
+        raise ServiceUnavailableError("Supabase client is not configured.")
+    return client
+
+
+SupabaseDep = Annotated[AsyncClient, Depends(get_supabase)]

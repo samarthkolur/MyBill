@@ -9,11 +9,12 @@ dependencies = [
     "uvicorn[standard]>=0.34,<1.0",
     "pydantic>=2.10,<3.0",
     "pydantic-settings>=2.7,<3.0",
+    "supabase>=2.10,<3.0",
 ]
 
-# Additional dependencies (async SQLAlchemy, Alembic, supabase-py, Celery, Redis,
-# Pillow, httpx, python-jose, ...) are declared by the tasks that introduce them,
-# so the install stays minimal until each is actually used. See DESIGN.md.
+# Additional dependencies (async SQLAlchemy, Alembic, Celery, Redis, Pillow,
+# python-jose, ...) are declared by the tasks that introduce them, so the install
+# stays minimal until each is actually used. See DESIGN.md.
 
 [dependency-groups]
 dev = [

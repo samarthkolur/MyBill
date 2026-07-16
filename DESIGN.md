@@ -7,10 +7,11 @@
 
 ## Current Phase
 
-**Phase 1 — Foundation**, Milestone 1.1 — Project Scaffolding
+**Phase 1 — Foundation** — Milestone 1.1 (Scaffolding) complete except the deferred Flutter
+task; moving to **Milestone 1.2 — Authentication**.
 
 > **1.1.3 (Flutter) is deferred** — the Flutter SDK isn't installed on this machine.
-> Backend/infra tasks were reordered ahead of it (see Design Decision 9). Flutter resumes
+> Backend/infra tasks were reordered ahead of it (see Design Decision 8). Flutter resumes
 > once the SDK is installed.
 
 ---
@@ -36,14 +37,14 @@ for now (mirroring `MyBill.md` §13) and will be broken into tasks as we approac
 
 ### Milestone 1.1 — Project Scaffolding
 
-| #     | Task                                                                                                                              | Status                          |
-| ----- | --------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- |
-| 1.1.1 | Create root folder structure (`backend/`, `mobile/`, `infra/`, `docs/`, `.github/workflows/`) + `.gitignore` + root `README.md`   | ✅ Done                         |
-| 1.1.2 | Configure FastAPI project (dependency management, app factory, settings, structured logging, `/health` endpoint)                  | ✅ Done                         |
-| 1.1.3 | Configure Flutter project (`flutter create`, Riverpod + GoRouter + Freezed deps, lint config, folder skeleton per `MyBill.md` §7) | ⏸️ Deferred (needs Flutter SDK) |
-| 1.1.4 | Configure Supabase project (Auth enabled, `users` table + RLS, `receipts` Storage bucket + policy)                                | ✅ Done                         |
-| 1.1.5 | Docker Compose for local dev (`api`, `worker`, `redis`)                                                                           | ⬜ Pending                      |
-| 1.1.6 | CI pipeline (GitHub Actions: `ruff` + `mypy` on backend, `flutter analyze` + `flutter test` on mobile, on every PR)               | ⬜ Pending                      |
+| #     | Task                                                                                                                              | Status                               |
+| ----- | --------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------ |
+| 1.1.1 | Create root folder structure (`backend/`, `mobile/`, `infra/`, `docs/`, `.github/workflows/`) + `.gitignore` + root `README.md`   | ✅ Done                              |
+| 1.1.2 | Configure FastAPI project (dependency management, app factory, settings, structured logging, `/health` endpoint)                  | ✅ Done                              |
+| 1.1.3 | Configure Flutter project (`flutter create`, Riverpod + GoRouter + Freezed deps, lint config, folder skeleton per `MyBill.md` §7) | ⏸️ Deferred (needs Flutter SDK)      |
+| 1.1.4 | Configure Supabase project (Auth enabled, `users` table + RLS, `receipts` Storage bucket + policy)                                | ✅ Done (applied live)               |
+| 1.1.5 | Docker Compose for local dev (`api`, `worker`, `redis`)                                                                           | ✅ Done (worker deferred to Phase 2) |
+| 1.1.6 | CI pipeline (GitHub Actions: `ruff` + `mypy` + tests on backend + Docker build; Flutter jobs when SDK lands)                      | ✅ Done                              |
 
 ### Milestone 1.2 — Authentication
 
@@ -133,7 +134,7 @@ for now (mirroring `MyBill.md` §13) and will be broken into tasks as we approac
     inbound `X-Request-ID` or generated), access logging, id echoed to response + logs.
   - `app/core/responses.py` — standard envelope (`success()` / `error()`, `ApiResponse[T]`).
   - `app/core/exceptions.py` — `AppError` hierarchy (`NotFound`/`Unauthorized`/`Forbidden`)
-    - handlers rendering every failure through the envelope; 500s logged, never leaked.
+    plus handlers rendering every failure through the envelope; 500s logged, never leaked.
   - `app/api/deps.py` — `SettingsDep` reads settings off `app.state` (not the global) so
     test overrides propagate.
   - `app/api/v1/router.py` + `routes/health.py` — `GET /v1/health`.
@@ -144,7 +145,7 @@ for now (mirroring `MyBill.md` §13) and will be broken into tasks as we approac
     Quality gates green: `ruff check`, `ruff format --check`, `mypy app` (strict), `pytest`.
 
 - **1.1.4 — Configure Supabase (schema + RLS + Storage)** (2026-07-16)
-  _Reordered ahead of 1.1.3 because the Flutter SDK isn't installed (decision 9)._
+  _Reordered ahead of 1.1.3 because the Flutter SDK isn't installed (decision 8)._
   Delivered four idempotent SQL migrations in `infra/supabase/migrations/`:
   - `…090000_init_extensions_and_helpers` — pgcrypto + reusable `set_updated_at()` trigger fn.
   - `…090100_create_users` — `public.users` (1:1 with `auth.users`), `updated_at` trigger,
@@ -155,26 +156,59 @@ for now (mirroring `MyBill.md` §13) and will be broken into tasks as we approac
     half of task 1.2.3, done at the layer where the invariant can't be bypassed.
   - `…090300_receipts_storage` — private `receipts` bucket + owner-scoped SELECT/INSERT/
     UPDATE/DELETE policies on `storage.objects` (`receipts/{user_id}/…` convention).
-    Migrations reference Supabase-managed `auth`/`storage`/roles and never create them.
-    **Verified live** against a throwaway `postgres:16` Docker container via
-    `infra/supabase/tests/run_tests.sh`: a harness stubs Supabase's auth/storage surface,
-    all migrations apply, and 5 assertions pass — signup trigger provisions a profile; RLS
-    isolates SELECT/INSERT/UPDATE per user; Storage scopes files to the owner's folder. Also
-    confirmed migrations are idempotent (clean re-apply). Setup guide in
-    `infra/supabase/README.md` (cloud project creation, credentials, `db push` vs SQL editor).
-    **Applied live** (2026-07-16) to the real project once creds were added: ref
-    `fkowzsdvwqbhrjykjrcb`, ap-south-1. Connection required the Supavisor **session pooler**
-    on the newer `aws-1-ap-south-1.pooler.supabase.com` fleet (direct host is IPv6-only, this
-    machine is IPv4-only). All objects verified present; end-to-end auth-sync test
-    (admin-create user → profile auto-created with correct defaults → delete → cascade) passed;
-    DB left clean. `.env` now separates `SUPABASE_URL` (API) from `SUPABASE_DB_URL` (pooler).
+
+  Migrations reference Supabase-managed `auth`/`storage`/roles and never create them.
+  **Verified locally** against a throwaway `postgres:16` Docker container via
+  `infra/supabase/tests/run_tests.sh`: a harness stubs Supabase's auth/storage surface,
+  all migrations apply, and 5 assertions pass — signup trigger provisions a profile; RLS
+  isolates SELECT/INSERT/UPDATE per user; Storage scopes files to the owner's folder. Also
+  confirmed migrations are idempotent (clean re-apply). Setup guide in
+  `infra/supabase/README.md`.
+  **Applied live** (2026-07-16) to the real project once creds were added: ref
+  `fkowzsdvwqbhrjykjrcb`, ap-south-1. Connection required the Supavisor **session pooler**
+  on the newer `aws-1-ap-south-1.pooler.supabase.com` fleet (direct host is IPv6-only, this
+  machine is IPv4-only). All objects verified present; end-to-end auth-sync test
+  (admin-create user → profile auto-created with correct defaults → delete → cascade) passed;
+  DB left clean. `.env` now separates `SUPABASE_URL` (API) from `SUPABASE_DB_URL` (pooler).
+
+- **1.1.5 — Docker Compose for local dev** (2026-07-16)
+  Delivered `backend/Dockerfile` (multi-stage, uv, `--frozen` lockfile install, non-root
+  `app` user, container HEALTHCHECK on `/v1/health`), `backend/.dockerignore` (keeps secrets
+  - caches + tests out of the build context/image), and `infra/docker-compose.yml` wiring:
+  * `api` — builds the image, hot-reloads via a `--reload` command override + read-only
+    mount of just `backend/app/` (so the container's pre-built `.venv` isn't shadowed),
+    published on `localhost:8000`, waits on redis health.
+  * `redis` — `redis:7-alpine` with a `redis-cli ping` healthcheck; broker/cache ready
+    for Phase 2. Not host-published by default.
+  * `worker` (Celery) — defined but **commented out** until the Celery app exists (Phase 2);
+    including a service that can't start would be placeholder scaffolding.
+
+  **Verified live:** `docker compose config` valid; image builds; `docker compose up` brings
+  the stack up; `GET /v1/health` returns the correct envelope through the container; uvicorn
+  runs with the WatchFiles reloader; the api container healthcheck reaches **healthy**;
+  `docker compose down` tears down cleanly. Docker usage documented in `backend/README.md`.
+
+- **1.1.6 — CI pipeline** (2026-07-16)
+  Delivered `.github/workflows/ci.yml` (GitHub Actions) running on PRs into `main` and pushes
+  to `main`, with `concurrency` cancellation and least-privilege `permissions`:
+  - **backend job** — `astral-sh/setup-uv` (pinned 0.5.9, cached on `uv.lock`), `uv sync
+--dev --frozen`, then `ruff check` (GitHub annotations), `ruff format --check`,
+    `mypy app` (strict), and `pytest`.
+  - **docker-build job** — builds `backend/Dockerfile` via Buildx + `build-push-action`
+    (GHA layer cache), then boots the image and smoke-tests `/v1/health` through it.
+  - Flutter jobs (`flutter analyze` / `flutter test`) noted as added once the SDK + app exist.
+
+  **Verified locally:** workflow is valid YAML; the exact backend commands all pass under
+  `--frozen` (`uv sync`, ruff lint, ruff format check, mypy, 4 pytest); and the docker-build
+  job's logic (build → run → curl `/v1/health` → 200 envelope) was reproduced end-to-end and
+  cleaned up. (`act` isn't installed, so steps were run manually rather than in a runner.)
 
 ---
 
 ## Pending Tasks
 
-Flutter (1.1.3) is deferred pending SDK install. Next unblocked task: **1.1.5 — Docker
-Compose for local dev** (or 1.1.6 CI). See full Phase 1 task list above.
+Milestone 1.1 is complete except deferred Flutter (1.1.3). Work moves to **Milestone 1.2 —
+Authentication**, starting with **1.2.1 — Supabase client setup**. See full task list above.
 
 ---
 
@@ -197,13 +231,12 @@ Compose for local dev** (or 1.1.6 CI). See full Phase 1 task list above.
 3. **`infra/` holds Docker Compose and Supabase migrations/config**, not a top-level
    `supabase/` or `docker/` directory.
    **Why:** keeps all non-application-code operational concerns in one place; matches the
-   `MyBill.md` §12 Docker Compose block, which we'll drop into `infra/docker-compose.yml`
-   in task 1.1.5.
+   `MyBill.md` §12 Docker Compose block, which lives at `infra/docker-compose.yml`.
 
-4. **`.gitkeep` used for now-empty scaffolded directories.**
+4. **`.gitkeep` used for now-empty scaffolded directories**, deleted the moment real content
+   lands in the directory.
    **Why:** git doesn't track empty directories; `.gitkeep` is a placeholder _file_, not
-   placeholder _code_ — it will be deleted the moment real content (e.g. `backend/app/main.py`)
-   lands in that directory in task 1.1.2.
+   placeholder _code_.
 
 5. **Backend dependency management via `uv`, dependencies declared incrementally.**
    `uv` is already installed on this machine (0.5.9); it's fast and lockfile-based.
@@ -217,7 +250,7 @@ Compose for local dev** (or 1.1.6 CI). See full Phase 1 task list above.
    default the ASGI `app` is built with), but handlers pull settings off
    `request.app.state.settings`. **Why:** the `create_app(settings=...)` factory lets tests
    build an app with overridden settings; if handlers read the cached global instead, those
-   overrides silently don't apply (caught in this task — the health test initially reported
+   overrides silently don't apply (caught in 1.1.2 — the health test initially reported
    `development` instead of `test`). This also gives DB session / Supabase client the same
    clean injection point later.
 
@@ -249,13 +282,32 @@ Compose for local dev** (or 1.1.6 CI). See full Phase 1 task list above.
     **Why:** keeps production migrations pristine (no test-only DDL) while still proving,
     concretely, that RLS isolates users.
 
-11. **Supabase CLI adoption deferred; migrations applied via SQL editor / psql for now.**
-    The CLI expects migrations under `supabase/migrations/`; ours live under
-    `infra/supabase/migrations/` (decision 3). **Why:** no Supabase project exists yet and
-    the CLI isn't installed; committing to its directory convention now would fight our
-    monorepo layout. When adopted, we move/symlink the folder. Recorded as tech debt.
+11. **Supabase CLI adoption deferred; migrations applied via psql for now.** The CLI expects
+    migrations under `supabase/migrations/`; ours live under `infra/supabase/migrations/`
+    (decision 3). **Why:** committing to its directory convention now would fight our
+    monorepo layout, and there's no migration-ledger need yet. When adopted, we move/symlink
+    the folder. Recorded as tech debt.
 
-12. **OCR provider, LLM provider, and other Phase 2/6 technology choices are deliberately
+12. **Compose `worker` service shipped commented-out; `redis` shipped live.** The Celery
+    `worker` in `MyBill.md` §12 can't start until `app/worker.py` (the Celery app) exists in
+    Phase 2, so enabling it now would be placeholder scaffolding that crash-loops — it's kept
+    as a commented target block instead. `redis` _is_ enabled now because it's zero-code real
+    infrastructure and having the broker/cache present makes the local stack match the target.
+    **Why:** honours "no placeholder code" while still delivering a working dev stack.
+
+13. **Dev hot-reload mounts only `backend/app/`, not the whole `backend/`.** Mounting the
+    entire backend dir over `/app` would shadow the image's pre-built `/app/.venv` with the
+    host (wrong/absent venv) and break the container. Mounting just the source package (read
+    only) gives live reload while preserving the installed venv.
+
+14. **CI scoped to backend gates + a Docker build/smoke job; Flutter jobs deferred.** The
+    workflow installs deps with `--frozen` (fails on lockfile drift) and mirrors the exact
+    local quality gates, plus builds the image and curls `/v1/health` through it. Flutter
+    `analyze`/`test` jobs are added when the app exists (1.1.3). The Supabase migration test
+    (`run_tests.sh`) is not yet a CI job — recorded as tech debt. **Why:** keeps the task
+    small and every step reproducible locally, matching what's actually buildable today.
+
+15. **OCR provider, LLM provider, and other Phase 2/6 technology choices are deliberately
     deferred**, not decided now.
     **Why:** `MyBill.md` already designs these behind swappable interfaces
     (`OCRProvider`, `ReceiptParser`, `LLMProvider`); picking a concrete implementation before
@@ -269,31 +321,36 @@ Compose for local dev** (or 1.1.6 CI). See full Phase 1 task list above.
 ```
 MyBill/
 ├── .github/
-│   └── workflows/            # CI pipelines (empty — task 1.1.6)
+│   └── workflows/
+│       └── ci.yml             # backend gates + Docker build smoke test
 ├── backend/                   # FastAPI service
 │   ├── app/
 │   │   ├── main.py            # create_app() factory + ASGI app
-│   │   ├── core/             # config, logging, middleware, responses, exceptions
+│   │   ├── core/              # config, logging, middleware, responses, exceptions
 │   │   └── api/
-│   │       ├── deps.py       # SettingsDep (+ future DB/Supabase deps)
+│   │       ├── deps.py        # SettingsDep (+ future DB/Supabase deps)
 │   │       └── v1/
 │   │           ├── router.py
 │   │           └── routes/health.py
-│   ├── tests/                # conftest + test_health
+│   ├── tests/                 # conftest + test_health
+│   ├── Dockerfile             # multi-stage uv image, non-root, healthcheck
+│   ├── .dockerignore
 │   ├── pyproject.toml
 │   ├── .env.example
 │   └── README.md
 ├── mobile/                    # Flutter app (empty — task 1.1.3, deferred)
 ├── infra/
+│   ├── docker-compose.yml     # local dev stack: api + redis (worker: Phase 2)
 │   └── supabase/
 │       ├── migrations/        # 4 idempotent SQL migrations (users, auth-sync, storage)
 │       ├── tests/             # harness.sql + test_rls.sql + run_tests.sh (local verify)
 │       └── README.md          # Supabase setup + migration guide
 ├── docs/                      # Supplementary docs (empty)
+├── .pre-commit-config.yaml    # prek hooks: ruff/mypy (backend) + prettier (docs), auto-fix
 ├── .gitignore
 ├── README.md
-├── MyBill.md                   # Architecture & product spec (source doc)
-└── DESIGN.md                   # This file
+├── MyBill.md                  # Architecture & product spec (source doc)
+└── DESIGN.md                  # This file
 ```
 
 ---
@@ -343,20 +400,22 @@ trigger fires and cascades correctly. DB left clean (0 rows).
   the files, so there's no `schema_migrations`-style record of what's been applied. Fine
   while files are idempotent, but adopt Alembic (backend) or `supabase db push` before the
   schema grows, so applied state is tracked rather than re-run-everything.
+- **Supabase migration test not in CI** — `infra/supabase/tests/run_tests.sh` runs locally
+  only; add it as a CI job (Postgres service container) so RLS regressions are caught on PRs.
 - **Supabase CLI not adopted** — migrations live in `infra/supabase/migrations/`, but the
   CLI expects `supabase/migrations/`. Move/symlink when we adopt `supabase db push`
-  (decision 12).
-- **`flutter` SDK not installed** — task 1.1.3 and all mobile work blocked until it is.
+  (decision 11).
+- **`flutter` SDK not installed** — task 1.1.3, Flutter CI jobs, and all mobile work blocked
+  until it is.
 
 ---
 
 ## Next Recommended Task
 
-**1.1.5 — Docker Compose for local dev**: an `infra/docker-compose.yml` wiring the `api`
-(FastAPI), `worker` (Celery — placeholder until Phase 2), and `redis` services from
-`MyBill.md` §12, plus a `backend/Dockerfile` (multi-stage, `uv`-based). Verifiable by
-`docker compose up` bringing the API up and `GET /v1/health` responding through the
-container. Unblocked and independently testable.
-
-_(Alternative unblocked task: 1.1.6 — CI pipeline. Flutter 1.1.3 remains deferred until
-the SDK is installed.)_
+**1.2.1 — Supabase client setup**: a backend Supabase/JWT layer built on the now-live
+project. Add the runtime deps (`supabase-py` or direct `httpx`/`python-jose` for JWT
+verification — decide in the task), a `get_supabase_client()` provider wired through
+`app/api/deps.py` and the lifespan hook, and config for `SUPABASE_URL` / keys / JWKS already
+present in `.env`. Verifiable by a test that the client initialises from settings and (with a
+real token) that a protected dependency accepts a valid JWT and rejects a bad one. This is
+the foundation for 1.2.2 (JWT middleware) and every authenticated endpoint after.
