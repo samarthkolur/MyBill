@@ -18,14 +18,35 @@ class ReceiptStatus(StrEnum):
     FAILED = "failed"
 
 
-class Receipt(BaseModel):
-    """A receipt row as returned to clients right after upload.
+class ReceiptImage(BaseModel):
+    """One page of a receipt (``public.receipt_images``).
 
-    Parsed fields (store, date, totals, items) are absent until OCR completes and are
-    added to the read models in Phase 2/3.
+    ``image_url`` is the Storage object key, not a fetchable URL — short-lived signed URLs
+    are minted on read (design decision 19).
+    """
+
+    id: UUID
+    receipt_id: UUID
+    image_url: str
+    page_number: int
+    created_at: datetime
+
+
+class Receipt(BaseModel):
+    """A receipt and its pages.
+
+    A receipt holds 1..N images (decision 24): the first is created at upload, further
+    pages are appended for receipts too long to photograph in one shot. Parsed fields
+    (store, date, totals, items) are absent until OCR completes and are added to the read
+    models in Phase 2/3.
     """
 
     id: UUID
     status: ReceiptStatus
-    image_url: str
     created_at: datetime
+    # Ordered by page number. A receipt created via upload always has at least one.
+    images: list[ReceiptImage] = []
+
+    @property
+    def page_count(self) -> int:
+        return len(self.images)

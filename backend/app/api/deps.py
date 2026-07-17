@@ -19,7 +19,7 @@ from supabase import AsyncClient
 from app.core.config import Settings
 from app.core.exceptions import ServiceUnavailableError, UnauthorizedError
 from app.core.security import AuthenticatedUser, AuthError, JwtVerifier
-from app.repositories.receipts import ReceiptRepository
+from app.repositories.receipts import ReceiptImageRepository, ReceiptRepository
 from app.repositories.users import UserRepository
 from app.services.receipts import ReceiptService
 from app.services.users import UserService
@@ -97,7 +97,7 @@ def get_receipt_service(
 ) -> ReceiptService:
     """Provide a ``ReceiptService`` backed by the shared Supabase client."""
 
-    return ReceiptService(supabase, ReceiptRepository(supabase))
+    return ReceiptService(supabase, ReceiptRepository(supabase), ReceiptImageRepository(supabase))
 
 
 ReceiptServiceDep = Annotated[ReceiptService, Depends(get_receipt_service)]
