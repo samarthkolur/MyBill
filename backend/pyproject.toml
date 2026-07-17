@@ -26,6 +26,10 @@ dev = [
     "ruff>=0.9,<1.0",
     "mypy>=1.14,<2.0",
 ]
+ocr = [
+    "onnxruntime>=1.27.0",
+    "rapidocr>=3.9,<4.0",
+]
 
 [build-system]
 requires = ["hatchling"]
@@ -75,6 +79,13 @@ plugins = ["pydantic.mypy"]
 [[tool.mypy.overrides]]
 module = ["tests.*"]
 disallow_untyped_defs = false
+
+# rapidocr ships no py.typed marker. Scoped to this one module rather than relaxing
+# imports globally — it's wrapped behind OCRProvider, so the untyped surface stops at
+# app/integrations/ocr.py and never reaches the parser or the worker.
+[[tool.mypy.overrides]]
+module = ["rapidocr.*"]
+ignore_missing_imports = true
 
 # ---------------------------------------------------------------------------
 # Pytest
