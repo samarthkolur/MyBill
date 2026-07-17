@@ -581,18 +581,18 @@ All responses use the standard envelope from `MyBill.md` §5 via `app.core.respo
 
 Migrations live in `infra/supabase/migrations/`, verified against Postgres 16.
 
-| Table / object                                        | Status                                     | Migration                     |
-| ----------------------------------------------------- | ------------------------------------------ | ----------------------------- |
-| `public.users` (+ RLS, grants, `updated_at` trigger)  | ✅ Created                                 | `…090100_create_users`        |
-| `handle_new_user()` auth-sync trigger                 | ✅ Created                                 | `…090200_auth_user_sync`      |
-| `receipts` Storage bucket (private) + policies        | ✅ Created                                 | `…090300_receipts_storage`    |
-| `stores` (+ RLS, grants, `updated_at`)                | ✅ Created                                 | `…093000_stores_and_receipts` |
-| `receipts` (+ RLS, grants, indexes, status CHECK)     | ✅ Created                                 | `…093000_stores_and_receipts` |
-| `receipt_images` (+ RLS, grants, indexes, page CHECK) | 🟡 Written, **not applied to the live DB** | `…120000_receipt_images`      |
-| `receipt_items`                                       | ⬜ Pending                                 | Phase 2                       |
-| `categories`                                          | ⬜ Pending                                 | Phase 2                       |
-| `price_history`                                       | ⬜ Pending                                 | Phase 2                       |
-| `analytics_cache`                                     | ⬜ Pending                                 | Phase 4                       |
+| Table / object                                        | Status                    | Migration                     |
+| ----------------------------------------------------- | ------------------------- | ----------------------------- |
+| `public.users` (+ RLS, grants, `updated_at` trigger)  | ✅ Created                | `…090100_create_users`        |
+| `handle_new_user()` auth-sync trigger                 | ✅ Created                | `…090200_auth_user_sync`      |
+| `receipts` Storage bucket (private) + policies        | ✅ Created                | `…090300_receipts_storage`    |
+| `stores` (+ RLS, grants, `updated_at`)                | ✅ Created                | `…093000_stores_and_receipts` |
+| `receipts` (+ RLS, grants, indexes, status CHECK)     | ✅ Created                | `…093000_stores_and_receipts` |
+| `receipt_images` (+ RLS, grants, indexes, page CHECK) | ✅ Created (applied live) | `…120000_receipt_images`      |
+| `receipt_items`                                       | ⬜ Pending                | Phase 2                       |
+| `categories`                                          | ⬜ Pending                | Phase 2                       |
+| `price_history`                                       | ⬜ Pending                | Phase 2                       |
+| `analytics_cache`                                     | ⬜ Pending                | Phase 4                       |
 
 Full target schema is `MyBill.md` §4. Migrations through `…093000_stores_and_receipts` were
 **applied and verified on the live Supabase project** (ref `fkowzsdvwqbhrjykjrcb`, region
@@ -600,12 +600,10 @@ ap-south-1) on 2026-07-16 — all objects confirmed present; the auth-sync trigg
 upload→pending-receipt flow were both exercised end-to-end against the live DB + Storage.
 DB left clean (0 rows). Note `receipts.date`/`total` are nullable (decision 18).
 
-> ⚠️ **`…120000_receipt_images` has NOT been applied to the live project.** It is verified
-> only against the throwaway Postgres harness (`infra/supabase/tests/run_tests.sh` — all 7
-> assertions pass). Until it is applied, the multi-page endpoints will fail against the live
-> DB: `receipts.image_url` is still `not null` there, so even a plain upload breaks, because
-> the service no longer writes that column. Apply it before running the backend against
-> live Supabase.
+`…120000_receipt_images` was **applied to the live project on 2026-07-17** and verified:
+table present, `receipts.image_url` now nullable, RLS enabled + forced, the owner policy,
+the `(receipt_id, page_number)` unique key, and the `page_number > 0` CHECK all confirmed.
+The backfill was a no-op (0 existing receipts), so no data was touched.
 
 ---
 
@@ -633,12 +631,11 @@ DB left clean (0 rows). Note `receipts.date`/`total` are nullable (decision 18).
 - **Supabase CLI not adopted** — migrations live in `infra/supabase/migrations/`, but the
   CLI expects `supabase/migrations/`. Move/symlink when we adopt `supabase db push`
   (decision 11).
-- **`…120000_receipt_images` not applied to the live Supabase project** — verified only
-  against the local Postgres harness. The backend now writes pages to `receipt_images` and
-  no longer writes `receipts.image_url`, which is still `not null` on live, so **uploads
-  will fail against live Supabase until this migration is applied**.
-- **Multi-page flow unverified end-to-end** — covered by unit tests, the RLS harness, and a
-  real APK build; no run against a live backend yet (see above).
+- **`receipts.image_url` still exists (nullable, deprecated)** — superseded by
+  `receipt_images` but kept for rollback safety. Drop it once nothing reads it.
+- **Multi-page flow unverified end-to-end** — covered by unit tests, the RLS harness, a real
+  APK build, and the migration is now applied live; but the capture → append → list round
+  trip has not been exercised against a running backend.
 - **Password reset isn't end-to-end** — 1.2.7 sends Supabase's recovery email, but the
   `io.mybill.app://reset-password` deep link is not registered in the Android manifest / iOS
   `Info.plist`, and there's no set-new-password screen. The link currently goes nowhere.
