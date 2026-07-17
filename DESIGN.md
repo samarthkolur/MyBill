@@ -8,13 +8,20 @@
 ## Current Phase
 
 **Phase 1 — Foundation** — **all backend work complete and verified** across Milestones
-1.1–1.3. The only remaining Phase 1 tasks are Flutter (deferred until the SDK is installed):
-auth screens/state/guards (1.2.4–1.2.9), camera/scan + client-side image prep (1.3.1–1.3.2),
-and the mobile upload wiring (1.3.5). The backend is ready for **Phase 2 — OCR Pipeline**.
+1.1–1.3, and **Milestone 1.2 (Authentication) is now complete on Flutter too**: the SDK is
+installed, so auth state/persistence, the Login/Sign Up/Forgot Password screens, the route
+guard, and logout (1.2.4–1.2.9) have landed.
 
-> **1.1.3 (Flutter) is deferred** — the Flutter SDK isn't installed on this machine.
-> Backend/infra tasks were reordered ahead of it (see Design Decision 8). Flutter resumes
-> once the SDK is installed.
+The remaining Phase 1 tasks are Milestone 1.3's Flutter half — camera/scan + client-side
+image prep (1.3.1–1.3.2) and the upload wiring (1.3.5) — after which Phase 1's exit
+criteria are met. The backend is separately ready for **Phase 2 — OCR Pipeline**.
+
+> **The Flutter SDK is installed** (3.35.6). Backend/infra tasks were reordered ahead of
+> the mobile work while it was blocked (see Design Decision 8); that block is now lifted.
+
+> **Password reset is not end-to-end.** 1.2.7 sends Supabase's recovery email, but the
+> `io.mybill.app://reset-password` deep link isn't registered in the Android manifest /
+> iOS `Info.plist` and there's no set-new-password screen yet. Tracked as outstanding.
 
 ---
 
@@ -50,17 +57,17 @@ for now (mirroring `MyBill.md` §13) and will be broken into tasks as we approac
 
 ### Milestone 1.2 — Authentication
 
-| #     | Task                                                                                                | Status                                       |
-| ----- | --------------------------------------------------------------------------------------------------- | -------------------------------------------- |
-| 1.2.1 | Supabase client setup (backend `supabase-py` client + Flutter `supabase_flutter` client)            | 🟢 Backend done; Flutter half deferred (SDK) |
-| 1.2.2 | JWT verification middleware (FastAPI dependency, validates Supabase-issued JWT on protected routes) | ✅ Done (ES256 via JWKS)                     |
-| 1.2.3 | User profile sync (on first authenticated request, ensure a row exists in `users`)                  | ✅ Done (DB trigger + app-layer safety-net)  |
-| 1.2.4 | Flutter: auth state (Riverpod notifier) + secure token persistence (`flutter_secure_storage`)       | ⏸️ Deferred (Flutter SDK)                    |
-| 1.2.5 | Flutter: Login screen                                                                               | ⏸️ Deferred (Flutter SDK)                    |
-| 1.2.6 | Flutter: Sign Up screen                                                                             | ⏸️ Deferred (Flutter SDK)                    |
-| 1.2.7 | Flutter: Forgot Password screen                                                                     | ⏸️ Deferred (Flutter SDK)                    |
-| 1.2.8 | GoRouter route guards (redirect unauthenticated users to login)                                     | ⏸️ Deferred (Flutter SDK)                    |
-| 1.2.9 | Logout flow (clear token, revoke Supabase session, redirect)                                        | ⏸️ Deferred (Flutter SDK)                    |
+| #     | Task                                                                                                | Status                                      |
+| ----- | --------------------------------------------------------------------------------------------------- | ------------------------------------------- |
+| 1.2.1 | Supabase client setup (backend `supabase-py` client + Flutter `supabase_flutter` client)            | ✅ Done                                     |
+| 1.2.2 | JWT verification middleware (FastAPI dependency, validates Supabase-issued JWT on protected routes) | ✅ Done (ES256 via JWKS)                    |
+| 1.2.3 | User profile sync (on first authenticated request, ensure a row exists in `users`)                  | ✅ Done (DB trigger + app-layer safety-net) |
+| 1.2.4 | Flutter: auth state (Riverpod notifier) + secure token persistence (`flutter_secure_storage`)       | ✅ Done                                     |
+| 1.2.5 | Flutter: Login screen                                                                               | ✅ Done                                     |
+| 1.2.6 | Flutter: Sign Up screen                                                                             | ✅ Done                                     |
+| 1.2.7 | Flutter: Forgot Password screen                                                                     | 🟢 Sends recovery email; deep link pending  |
+| 1.2.8 | GoRouter route guards (redirect unauthenticated users to login)                                     | ✅ Done                                     |
+| 1.2.9 | Logout flow (clear token, revoke Supabase session, redirect)                                        | ✅ Done                                     |
 
 ### Milestone 1.3 — Camera & Upload
 
@@ -270,14 +277,42 @@ for now (mirroring `MyBill.md` §13) and will be broken into tasks as we approac
     **Verified live** end-to-end: real token → upload 201 pending; DB row present under the
     owner's folder; storage object present; PDF → 415; no token → 401. Project left clean.
 
+- **1.2.1 (Flutter half) / 1.2.4–1.2.9 — Mobile authentication** (2026-07-17)
+  The Flutter SDK (3.35.6) is installed, unblocking the mobile track. Milestone 1.2 is now
+  complete on the client: sign in / sign up / password-reset request, session persistence,
+  route guarding, and logout. Delivered:
+  - `supabase_flutter` + `flutter_secure_storage` added. `core/storage/secure_local_storage.dart`
+    — a `LocalStorage` implementation persisting the session to the platform keystore instead
+    of the SDK's default plain-text `SharedPreferences` (a session string carries a live
+    access token _and_ a long-lived refresh token). Wired via `FlutterAuthClientOptions`.
+  - `features/auth/data/auth_repository.dart` — wraps Supabase Auth so screens never import
+    the SDK. `features/auth/application/auth_controller.dart` — `AuthController` mirrors
+    `onAuthStateChange` (so background refresh/expiry is reflected app-wide) and exposes
+    `AuthStatus.{unknown,authenticated,unauthenticated}`; `unknown` parks on a new splash so
+    a returning user never sees a login flash.
+  - Screens: Login (1.2.5), Sign Up (1.2.6, `full_name` → user metadata → the 1.2.3 trigger),
+    Forgot Password (1.2.7), plus a shared `AuthErrorBanner` and `core/utils/validators.dart`.
+  - `core/router/app_router.dart` — the guard (1.2.8) as one `redirect` rule, so new routes
+    are protected by default; logout (1.2.9) on the home screen just clears state and lets
+    the guard redirect. Router built once, refreshed via a `ValueNotifier` bridge.
+  - Config via `--dart-define` (`SUPABASE_URL`, `SUPABASE_ANON_KEY`); boot fails loudly when
+    absent. `mobile/README.md` rewritten (config, run, architecture, auth model).
+  - `test/widget_test.dart` — 5 widget tests over a fake repository (guard redirects both
+    ways, sign-in → home, sign-out → login, client-side validation). **All 5 pass**;
+    `flutter analyze` clean; `flutter build web` compiles. The tests caught a real
+    `RenderFlex` overflow in the login/signup footer rows (now `Wrap`).
+  - **Not verified against a live Supabase project** — no emulator on this machine, so the
+    flows are covered by widget tests + a real compile, not a manual end-to-end run.
+
 ---
 
 ## Pending Tasks
 
-**All Phase 1 backend work is done.** Remaining Phase 1 tasks are Flutter-only and deferred
-until the SDK is installed (auth UI 1.2.4–1.2.9; scan/crop 1.3.1–1.3.2; upload wiring 1.3.5).
-The backend is ready for **Phase 2 — OCR Pipeline** (awaiting go-ahead per the phase
-boundary). See full task list above.
+**All Phase 1 backend work is done, and Milestone 1.2 is now complete on Flutter.** Remaining
+Phase 1 tasks are Milestone 1.3's Flutter half: scan/crop (1.3.1–1.3.2) and upload wiring
+(1.3.5) — after which Phase 1's exit criteria are met. Also outstanding: the password-reset
+deep link (see Technical Debt). The backend is separately ready for **Phase 2 — OCR
+Pipeline**. See full task list above.
 
 ---
 
@@ -422,6 +457,23 @@ boundary). See full task list above.
     we reach that phase would be a decision made without the context (pricing at the time,
     receipt sample quality) needed to make it well.
 
+21. **Supabase sessions persist to the platform keystore via a custom `LocalStorage`,
+    not the SDK's default `SharedPreferences`.**
+    **Why:** the SDK's default writes the session as plain text on disk, and that session
+    carries both a live access token and a long-lived refresh token — the refresh token is
+    the durable credential, so leaking it is worse than leaking a short-lived JWT. Task
+    1.2.4 already called for `flutter_secure_storage`; implementing `LocalStorage` against
+    it satisfies that _and_ keeps the SDK's automatic refresh, which hand-rolling token
+    storage would have forced us to reimplement.
+
+22. **The auth guard is a single `redirect` rule in the router; screens never navigate on
+    sign-in/sign-out.**
+    **Why:** redirect logic duplicated per screen drifts, and the failure mode is a route
+    that silently isn't protected. One rule inverts the default — a new route is protected
+    unless it opts into `AppRoutes.unauthenticated` — and because the rule keys off
+    `AuthController` (which mirrors the SDK's auth stream), a session that expires or is
+    refreshed in the background is handled by the same path as an explicit sign-out.
+
 ---
 
 ## Folder Structure (current)
@@ -450,7 +502,18 @@ MyBill/
 │   ├── pyproject.toml
 │   ├── .env.example
 │   └── README.md
-├── mobile/                    # Flutter app (empty — task 1.1.3, deferred)
+├── mobile/                    # Flutter app
+│   ├── lib/
+│   │   ├── main.dart          # Supabase init (secure session storage) → runApp
+│   │   ├── app.dart           # MaterialApp.router + theme
+│   │   ├── core/              # constants (dart-define config), router (+ auth guard),
+│   │   │                      #   storage (keystore LocalStorage), theme, utils (validators)
+│   │   └── features/
+│   │       ├── auth/          # data/ (repository), application/ (AuthController), presentation/
+│   │       ├── home/          # placeholder dashboard (behind the guard)
+│   │       └── splash/        # shown while the session is restored
+│   ├── test/                  # widget tests (guard, sign-in/out, validation)
+│   └── README.md              # config, run, architecture, auth model
 ├── infra/
 │   ├── docker-compose.yml     # local dev stack: api + redis (worker: Phase 2)
 │   └── supabase/
@@ -527,24 +590,37 @@ are nullable (decision 18).
 - **Supabase CLI not adopted** — migrations live in `infra/supabase/migrations/`, but the
   CLI expects `supabase/migrations/`. Move/symlink when we adopt `supabase db push`
   (decision 11).
-- **`flutter` SDK not installed** — task 1.1.3, Flutter CI jobs, and all mobile work blocked
-  until it is.
+- **Password reset isn't end-to-end** — 1.2.7 sends Supabase's recovery email, but the
+  `io.mybill.app://reset-password` deep link is not registered in the Android manifest / iOS
+  `Info.plist`, and there's no set-new-password screen. The link currently goes nowhere.
+- **Mobile auth not verified against a live Supabase project** — covered by widget tests
+  against a fake repository plus a real web compile; no emulator on this machine, so the
+  flows haven't been exercised end-to-end. Do a manual pass before relying on them.
+- **Flutter jobs still absent from CI** — the SDK is installed locally now, so the reason
+  for deferring them (decision 14) is gone; add `flutter analyze` + `flutter test` jobs.
+- **Dart/Flutter not covered by the pre-commit hooks** — `.pre-commit-config.yaml` gates
+  Python (ruff/mypy) and YAML/JSON/Markdown (prettier), but nothing runs `dart format` or
+  `flutter analyze`, so mobile regressions aren't caught before commit.
 
 ---
 
 ## Next Recommended Task
 
-**Phase 1 backend is complete** — the remaining Phase 1 tasks are all Flutter and blocked on
-the SDK. Two ways forward (needs a decision at this phase boundary):
+**Phase 1 backend is complete, and Milestone 1.2 (Authentication) is now complete on Flutter
+too.** The SDK is installed, so the mobile track is no longer blocked.
 
-1. **Install the Flutter SDK** and pick up the mobile Phase 1 work (auth screens/state/guards
-   1.2.4–1.2.9, scan + client-side image prep 1.3.1–1.3.2, upload wiring 1.3.5) so Phase 1's
-   exit criteria (register → log in → photograph → upload) can be met end-to-end.
+**Recommended next: finish Milestone 1.3's Flutter half** — the Scan screen (camera capture +
+gallery picker, 1.3.1), pre-upload crop/rotate + compression (1.3.2), and the upload wiring
+with progress UI + offline retry queue (1.3.5). That closes Phase 1's exit criteria
+(register → log in → photograph → upload) end-to-end against the already-live
+`POST /v1/receipts/upload`.
+
+Then either:
+
+1. **Close the auth loose end** — register the `io.mybill.app://reset-password` deep link and
+   add a set-new-password screen so 1.2.7 is genuinely end-to-end.
 2. **Begin Phase 2 — OCR Pipeline** on the backend: choose the OCR provider (recommended:
    Google Document AI), stand up Celery + Redis (compose `worker` already stubbed), define the
    `OCRProvider`/`ReceiptParser` interfaces, and process a `pending` receipt into
    `receipt_items` + `price_history`. The upload endpoint already produces the `pending` rows
    this consumes.
-
-Recommendation: **Phase 2 backend** while Flutter remains blocked, since it's fully unblocked
-and builds directly on the upload flow just shipped.
