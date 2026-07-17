@@ -656,9 +656,10 @@ The backfill was a no-op (0 existing receipts), so no data was touched.
   (decision 11).
 - **`receipts.image_url` still exists (nullable, deprecated)** — superseded by
   `receipt_images` but kept for rollback safety. Drop it once nothing reads it.
-- **Multi-page flow not yet exercised from the phone UI** — the API round trip is verified
-  live (see Completed Tasks), but the Scan screen's target picker itself has only unit-test
-  coverage, not a manual run on-device.
+- **The "add to an existing bill" picker is unconfirmed on-device** — capture → crop →
+  upload was exercised by hand on a Pixel 9 (2026-07-17) and works, and the append/list API
+  is verified live; but tapping **Change** to send a page to an existing bill has only
+  unit-test coverage so far.
 - **Password reset isn't end-to-end** — 1.2.7 sends Supabase's recovery email, but the
   `io.mybill.app://reset-password` deep link is not registered in the Android manifest / iOS
   `Info.plist`, and there's no set-new-password screen. The link currently goes nowhere.
