@@ -304,6 +304,29 @@ for now (mirroring `MyBill.md` §13) and will be broken into tasks as we approac
   - **Not verified against a live Supabase project** — no emulator on this machine, so the
     flows are covered by widget tests + a real compile, not a manual end-to-end run.
 
+- **Multi-page receipts (`receipt_images`) — DB + API + mobile** (2026-07-17)
+  A receipt now holds 1..N pages, so a long receipt can be photographed in several shots and
+  appended to the same bill instead of becoming several unrelated ones. Delivered:
+  - Migration `…120000_receipt_images` — new table (RLS enable+force, owner policy, grants,
+    indexes, `(receipt_id, page_number)` unique, `page_number > 0` CHECK, cascade from
+    receipts), backfills `receipts.image_url` as page 1, then drops that column's NOT NULL.
+    The column is retained (nullable, deprecated) for rollback. **Applied live** 2026-07-17.
+  - `ReceiptImageRepository`; `ReceiptRepository` gains `get_owned`/`list_for_user`/`delete`.
+    `ReceiptService` gains `add_image`/`list_receipts`; upload writes page 1 to
+    `receipt_images` and deletes the receipt row if the page fails to store (decision 25).
+    Routes: `POST /v1/receipts/{id}/images`, `GET /v1/receipts`. Pages capped at 20.
+  - Mobile: `ScanTarget` (new bill vs existing), a bottom-sheet picker backed by
+    `GET /receipts`, `Receipt`/`ReceiptImage` models. Defaults to a new bill.
+  - Tests: backend **37 passed** (ruff + ruff format + mypy strict clean); mobile **16
+    passed**, analyze clean; RLS harness **7/7** including the new receipt_images assertions.
+  - **Verified live end-to-end** against the real Supabase project + a running backend:
+    upload → 201 with page 1; two appends → pages 2 and 3 on the same receipt with
+    server-assigned numbers; `GET /v1/receipts` returned the receipt with all 3 pages;
+    unknown receipt → 404; non-image → 415; no token → 401. DB and Storage confirmed
+    (1 receipt, 3 images, 3 objects under the owner's folder). Test user and all artifacts
+    deleted afterwards — **project left clean** (receipts=0, receipt_images=0, objects=0).
+    Not yet driven from the phone UI (see Technical Debt).
+
 ---
 
 ## Pending Tasks
@@ -633,9 +656,9 @@ The backfill was a no-op (0 existing receipts), so no data was touched.
   (decision 11).
 - **`receipts.image_url` still exists (nullable, deprecated)** — superseded by
   `receipt_images` but kept for rollback safety. Drop it once nothing reads it.
-- **Multi-page flow unverified end-to-end** — covered by unit tests, the RLS harness, a real
-  APK build, and the migration is now applied live; but the capture → append → list round
-  trip has not been exercised against a running backend.
+- **Multi-page flow not yet exercised from the phone UI** — the API round trip is verified
+  live (see Completed Tasks), but the Scan screen's target picker itself has only unit-test
+  coverage, not a manual run on-device.
 - **Password reset isn't end-to-end** — 1.2.7 sends Supabase's recovery email, but the
   `io.mybill.app://reset-password` deep link is not registered in the Android manifest / iOS
   `Info.plist`, and there's no set-new-password screen. The link currently goes nowhere.
