@@ -140,6 +140,65 @@ begin;
   end $$;
 rollback;
 
+-- ===========================================================================
+-- Test 7: receipt_images RLS + page numbering constraints
+-- ===========================================================================
+begin;
+  set local role authenticated;
+  set local request.jwt.claim.sub = '11111111-1111-1111-1111-111111111111';
+  do $$
+  declare
+    v_receipt_id uuid;
+  begin
+    insert into public.receipts (user_id)
+      values ('11111111-1111-1111-1111-111111111111')
+      returning id into v_receipt_id;
+
+    -- Allowed: pages on the caller's own receipt.
+    insert into public.receipt_images (receipt_id, user_id, image_url, page_number)
+      values (v_receipt_id, '11111111-1111-1111-1111-111111111111', 'a/r1/page_1.jpg', 1);
+    insert into public.receipt_images (receipt_id, user_id, image_url, page_number)
+      values (v_receipt_id, '11111111-1111-1111-1111-111111111111', 'a/r1/page_2.jpg', 2);
+
+    -- Blocked: attributing a page to another user.
+    begin
+      insert into public.receipt_images (receipt_id, user_id, image_url, page_number)
+        values (v_receipt_id, '22222222-2222-2222-2222-222222222222', 'b/r1/page_1.jpg', 3);
+      raise exception 'Test 7 FAILED: inserting a receipt image for another user was allowed';
+    exception when insufficient_privilege then
+      null;  -- expected
+    end;
+
+    -- Blocked: two pages claiming the same position in one receipt.
+    begin
+      insert into public.receipt_images (receipt_id, user_id, image_url, page_number)
+        values (v_receipt_id, '11111111-1111-1111-1111-111111111111', 'a/r1/dupe.jpg', 2);
+      raise exception 'Test 7 FAILED: duplicate page_number was allowed';
+    exception when unique_violation then
+      null;  -- expected
+    end;
+
+    -- Blocked: page numbers start at 1.
+    begin
+      insert into public.receipt_images (receipt_id, user_id, image_url, page_number)
+        values (v_receipt_id, '11111111-1111-1111-1111-111111111111', 'a/r1/zero.jpg', 0);
+      raise exception 'Test 7 FAILED: page_number = 0 was allowed';
+    exception when check_violation then
+      null;  -- expected
+    end;
+
+    assert (select count(*) from public.receipt_images) = 2,
+      'Test 7 FAILED: caller sees receipt images other than their own';
+
+    -- Deleting the receipt cascades to its pages, so no orphan rows survive.
+    delete from public.receipts where id = v_receipt_id;
+    assert (select count(*) from public.receipt_images where receipt_id = v_receipt_id) = 0,
+      'Test 7 FAILED: receipt images were not cascaded on receipt delete';
+
+    raise notice 'Test 7 PASSED: receipt_images RLS + page constraints + cascade';
+  end $$;
+rollback;
+
 \echo '---------------------------------------------'
 \echo 'All RLS / auth-sync assertions passed.'
 \echo '---------------------------------------------'
