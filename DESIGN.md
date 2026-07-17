@@ -71,13 +71,13 @@ for now (mirroring `MyBill.md` §13) and will be broken into tasks as we approac
 
 ### Milestone 1.3 — Camera & Upload
 
-| #     | Task                                                                                              | Status                                           |
-| ----- | ------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
-| 1.3.1 | Flutter: Scan screen — camera capture + gallery picker                                            | ✅ Done (via `image_picker`, decision 23)        |
-| 1.3.2 | Flutter: pre-upload crop/rotate (`image_cropper`) + client-side compression (≤2MB, quality 85%)   | ✅ Done                                          |
-| 1.3.3 | Backend: `POST /v1/receipts/upload` — stores image in Supabase Storage (`receipts/{user_id}/...`) | ✅ Done                                          |
-| 1.3.4 | Backend: create `receipts` row with `status = pending` on upload                                  | ✅ Done                                          |
-| 1.3.5 | Flutter: wire upload flow end-to-end + progress UI, persisted upload queue for offline retry      | 🟢 Upload + progress done; offline queue pending |
+| #     | Task                                                                                              | Status                                                        |
+| ----- | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| 1.3.1 | Flutter: Scan screen — camera capture + gallery picker                                            | ✅ Done (via `image_picker`, decision 23)                     |
+| 1.3.2 | Flutter: pre-upload crop/rotate (`image_cropper`) + client-side compression (≤2MB, quality 85%)   | ✅ Done                                                       |
+| 1.3.3 | Backend: `POST /v1/receipts/upload` — stores image in Supabase Storage (`receipts/{user_id}/...`) | ✅ Done                                                       |
+| 1.3.4 | Backend: create `receipts` row with `status = pending` on upload                                  | ✅ Done                                                       |
+| 1.3.5 | Flutter: wire upload flow end-to-end + progress UI, persisted upload queue for offline retry      | 🟢 Upload + progress + multi-page done; offline queue pending |
 
 **Phase 1 exit criteria** (from `MyBill.md`): user can register, log in, photograph a receipt, and see it uploaded.
 
@@ -481,15 +481,31 @@ Pipeline**. See full task list above.
     with a fraction of the code. A branded in-app viewfinder is a UX upgrade we can make
     later behind the same `ImagePipeline` seam, without touching the upload path.
 
-24. **Multi-image ("add to an existing bill") receipts are deferred; single-image upload
-    ships first.**
-    **Why:** the requirement (raised 2026-07-17) implies multi-page receipts, which the
-    schema cannot represent — `receipts.image_url` is a single `not null` column and the
-    storage key is `{user_id}/{receipt_id}/original.{ext}`, one object per receipt. It also
-    needs a `GET /v1/receipts` list endpoint (Phase 3 work) so the user has bills to choose
-    between; neither exists. Shipping single-image capture first closes Phase 1's exit
-    criteria against the live endpoint, and the multi-page stack lands as a coherent
-    follow-up rather than a half-built client path. See Pending Tasks.
+24. **Multi-image ("add to an existing bill") receipts: single-image upload shipped first,
+    then the multi-page stack.** ✅ _Both now landed._
+    **Why (sequencing):** the requirement (raised 2026-07-17) implies multi-page receipts,
+    which the schema could not represent — `receipts.image_url` was a single `not null`
+    column, one storage object per receipt — and needed a `GET /v1/receipts` list endpoint
+    so the user had bills to choose between. Shipping single-image capture first closed
+    Phase 1's exit criteria against the live endpoint rather than leaving a half-built
+    client path.
+    **How it landed:** `receipt_images` (1 → N) is the source of truth;
+    `receipts.image_url` was backfilled as page 1 and made nullable rather than dropped, so
+    a rollback keeps its data. `user_id` is denormalised onto the table so RLS is checkable
+    without a join. `(receipt_id, page_number)` is unique — that constraint, not the
+    read-then-write in `next_page_number`, is what actually prevents two concurrent uploads
+    claiming a page. Pages are capped at 20 per receipt.
+
+25. **A receipt whose first page fails to store is deleted, not left behind.**
+    **Why:** the row and its image are written separately, so a storage failure after the
+    insert would leave a pageless receipt — a bill the user can see, can't open, and didn't
+    ask for. Deleting the row makes a failed upload a no-op instead of visible litter. (The
+    previous single-image flow had the inverse cleanup: remove the orphaned object.)
+
+26. **Unknown and not-yours both answer 404 on receipt routes.**
+    **Why:** a 403 for someone else's receipt would confirm the id exists. Scoping the
+    lookup by `user_id` as well as `id` makes the two cases indistinguishable, so the
+    endpoint can't be used to probe for valid ids.
 
 ---
 
@@ -549,11 +565,13 @@ MyBill/
 
 ## APIs Implemented
 
-| Method | Path                  | Auth | Status  | Notes                                                                              |
-| ------ | --------------------- | ---- | ------- | ---------------------------------------------------------------------------------- |
-| `GET`  | `/v1/health`          | no   | ✅ Live | Liveness; always 200 when up. Readiness (`/health/ready`, DB/Redis) to follow.     |
-| `GET`  | `/v1/auth/me`         | yes  | ✅ Live | Verifies the Supabase JWT; ensures + returns the caller's profile. 401 if invalid. |
-| `POST` | `/v1/receipts/upload` | yes  | ✅ Live | Multipart image → private Storage + `pending` receipt row. 415/413 on bad image.   |
+| Method | Path                       | Auth | Status  | Notes                                                                                     |
+| ------ | -------------------------- | ---- | ------- | ----------------------------------------------------------------------------------------- |
+| `GET`  | `/v1/health`               | no   | ✅ Live | Liveness; always 200 when up. Readiness (`/health/ready`, DB/Redis) to follow.            |
+| `GET`  | `/v1/auth/me`              | yes  | ✅ Live | Verifies the Supabase JWT; ensures + returns the caller's profile. 401 if invalid.        |
+| `POST` | `/v1/receipts/upload`      | yes  | ✅ Live | Multipart image → private Storage + `pending` receipt row (page 1). 415/413 on bad image. |
+| `POST` | `/v1/receipts/{id}/images` | yes  | ✅ Live | Append a page to an existing bill; server assigns the page number. 404/415/413.           |
+| `GET`  | `/v1/receipts`             | yes  | ✅ Live | The caller's receipts (newest first, with pages). Backs the add-to-existing picker.       |
 
 All responses use the standard envelope from `MyBill.md` §5 via `app.core.responses`.
 
@@ -563,23 +581,31 @@ All responses use the standard envelope from `MyBill.md` §5 via `app.core.respo
 
 Migrations live in `infra/supabase/migrations/`, verified against Postgres 16.
 
-| Table / object                                       | Status     | Migration                     |
-| ---------------------------------------------------- | ---------- | ----------------------------- |
-| `public.users` (+ RLS, grants, `updated_at` trigger) | ✅ Created | `…090100_create_users`        |
-| `handle_new_user()` auth-sync trigger                | ✅ Created | `…090200_auth_user_sync`      |
-| `receipts` Storage bucket (private) + policies       | ✅ Created | `…090300_receipts_storage`    |
-| `stores` (+ RLS, grants, `updated_at`)               | ✅ Created | `…093000_stores_and_receipts` |
-| `receipts` (+ RLS, grants, indexes, status CHECK)    | ✅ Created | `…093000_stores_and_receipts` |
-| `receipt_items`                                      | ⬜ Pending | Phase 2                       |
-| `categories`                                         | ⬜ Pending | Phase 2                       |
-| `price_history`                                      | ⬜ Pending | Phase 2                       |
-| `analytics_cache`                                    | ⬜ Pending | Phase 4                       |
+| Table / object                                        | Status                                     | Migration                     |
+| ----------------------------------------------------- | ------------------------------------------ | ----------------------------- |
+| `public.users` (+ RLS, grants, `updated_at` trigger)  | ✅ Created                                 | `…090100_create_users`        |
+| `handle_new_user()` auth-sync trigger                 | ✅ Created                                 | `…090200_auth_user_sync`      |
+| `receipts` Storage bucket (private) + policies        | ✅ Created                                 | `…090300_receipts_storage`    |
+| `stores` (+ RLS, grants, `updated_at`)                | ✅ Created                                 | `…093000_stores_and_receipts` |
+| `receipts` (+ RLS, grants, indexes, status CHECK)     | ✅ Created                                 | `…093000_stores_and_receipts` |
+| `receipt_images` (+ RLS, grants, indexes, page CHECK) | 🟡 Written, **not applied to the live DB** | `…120000_receipt_images`      |
+| `receipt_items`                                       | ⬜ Pending                                 | Phase 2                       |
+| `categories`                                          | ⬜ Pending                                 | Phase 2                       |
+| `price_history`                                       | ⬜ Pending                                 | Phase 2                       |
+| `analytics_cache`                                     | ⬜ Pending                                 | Phase 4                       |
 
-Full target schema is `MyBill.md` §4. **Applied and verified on the live Supabase project**
-(ref `fkowzsdvwqbhrjykjrcb`, region ap-south-1) on 2026-07-16 — all objects confirmed
-present; the auth-sync trigger and the upload→pending-receipt flow were both exercised
-end-to-end against the live DB + Storage. DB left clean (0 rows). Note `receipts.date`/`total`
-are nullable (decision 18).
+Full target schema is `MyBill.md` §4. Migrations through `…093000_stores_and_receipts` were
+**applied and verified on the live Supabase project** (ref `fkowzsdvwqbhrjykjrcb`, region
+ap-south-1) on 2026-07-16 — all objects confirmed present; the auth-sync trigger and the
+upload→pending-receipt flow were both exercised end-to-end against the live DB + Storage.
+DB left clean (0 rows). Note `receipts.date`/`total` are nullable (decision 18).
+
+> ⚠️ **`…120000_receipt_images` has NOT been applied to the live project.** It is verified
+> only against the throwaway Postgres harness (`infra/supabase/tests/run_tests.sh` — all 7
+> assertions pass). Until it is applied, the multi-page endpoints will fail against the live
+> DB: `receipts.image_url` is still `not null` there, so even a plain upload breaks, because
+> the service no longer writes that column. Apply it before running the backend against
+> live Supabase.
 
 ---
 
@@ -607,6 +633,12 @@ are nullable (decision 18).
 - **Supabase CLI not adopted** — migrations live in `infra/supabase/migrations/`, but the
   CLI expects `supabase/migrations/`. Move/symlink when we adopt `supabase db push`
   (decision 11).
+- **`…120000_receipt_images` not applied to the live Supabase project** — verified only
+  against the local Postgres harness. The backend now writes pages to `receipt_images` and
+  no longer writes `receipts.image_url`, which is still `not null` on live, so **uploads
+  will fail against live Supabase until this migration is applied**.
+- **Multi-page flow unverified end-to-end** — covered by unit tests, the RLS harness, and a
+  real APK build; no run against a live backend yet (see above).
 - **Password reset isn't end-to-end** — 1.2.7 sends Supabase's recovery email, but the
   `io.mybill.app://reset-password` deep link is not registered in the Android manifest / iOS
   `Info.plist`, and there's no set-new-password screen. The link currently goes nowhere.
