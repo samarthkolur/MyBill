@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import 'package:mybill/core/constants/app_constants.dart';
+import 'package:mybill/core/router/app_router.dart';
 import 'package:mybill/features/auth/application/auth_controller.dart';
 import 'package:mybill/features/auth/data/auth_repository.dart';
 
@@ -71,6 +73,11 @@ class HomeScreen extends ConsumerWidget {
             ],
           ),
         ),
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => context.push(AppRoutes.scan),
+        icon: const Icon(Icons.photo_camera_outlined),
+        label: const Text('Scan receipt'),
       ),
     );
   }

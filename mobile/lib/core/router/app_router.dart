@@ -7,6 +7,7 @@ import 'package:mybill/features/auth/presentation/forgot_password_screen.dart';
 import 'package:mybill/features/auth/presentation/login_screen.dart';
 import 'package:mybill/features/auth/presentation/signup_screen.dart';
 import 'package:mybill/features/home/presentation/home_screen.dart';
+import 'package:mybill/features/scan/presentation/scan_screen.dart';
 import 'package:mybill/features/splash/presentation/splash_screen.dart';
 
 /// Route path constants — referenced by name so navigation call-sites don't hard-code
@@ -19,6 +20,7 @@ class AppRoutes {
   static const String signUp = '/signup';
   static const String forgotPassword = '/forgot-password';
   static const String home = '/';
+  static const String scan = '/scan';
 
   /// Routes reachable while signed out. Everything else requires a session.
   static const Set<String> unauthenticated = {login, signUp, forgotPassword};
@@ -87,6 +89,11 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: AppRoutes.home,
         name: 'home',
         builder: (context, state) => const HomeScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.scan,
+        name: 'scan',
+        builder: (context, state) => const ScanScreen(),
       ),
     ],
   );
