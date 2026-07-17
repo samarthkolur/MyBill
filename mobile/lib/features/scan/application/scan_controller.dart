@@ -26,6 +26,22 @@ enum ScanStage {
   success,
 }
 
+/// Where the captured page should go (decision 24).
+///
+/// Null [receiptId] means "create a new bill"; a non-null id appends the page to that
+/// existing bill — the case for a receipt too long to photograph in one shot.
+class ScanTarget {
+  const ScanTarget.newBill() : receiptId = null, label = null;
+  const ScanTarget.existing({required String this.receiptId, this.label});
+
+  final String? receiptId;
+
+  /// How the target reads in the UI ("New bill" vs a description of the chosen bill).
+  final String? label;
+
+  bool get isNewBill => receiptId == null;
+}
+
 /// Immutable state of the scan screen.
 class ScanState {
   const ScanState({
@@ -35,6 +51,7 @@ class ScanState {
     this.receipt,
     this.error,
     this.isRetryable = false,
+    this.target = const ScanTarget.newBill(),
   });
 
   final ScanStage stage;
@@ -47,6 +64,9 @@ class ScanState {
   /// fix, not something a retry button can help with.
   final bool isRetryable;
 
+  /// New bill, or an existing one to append to.
+  final ScanTarget target;
+
   bool get isBusy =>
       stage == ScanStage.preparing || stage == ScanStage.uploading;
 
@@ -57,6 +77,7 @@ class ScanState {
     Receipt? receipt,
     String? error,
     bool? isRetryable,
+    ScanTarget? target,
     bool clearError = false,
     bool clearImage = false,
   }) => ScanState(
@@ -66,6 +87,7 @@ class ScanState {
     receipt: receipt ?? this.receipt,
     error: clearError ? null : (error ?? this.error),
     isRetryable: isRetryable ?? this.isRetryable,
+    target: target ?? this.target,
   );
 }
 
@@ -99,7 +121,11 @@ class ScanController extends StateNotifier<ScanState> {
     }
   }
 
-  /// Upload the prepared image (task 1.3.5).
+  /// Choose whether this page starts a new bill or joins an existing one (decision 24).
+  void setTarget(ScanTarget target) =>
+      state = state.copyWith(target: target, clearError: true);
+
+  /// Upload the prepared image to the chosen target (task 1.3.5).
   Future<void> upload() async {
     final image = state.image;
     if (image == null || state.stage == ScanStage.uploading) return;
@@ -111,17 +137,27 @@ class ScanController extends StateNotifier<ScanState> {
       clearError: true,
     );
 
+    void reportProgress(double progress) {
+      // A late callback after cancel/success must not resurrect the progress bar.
+      if (state.stage == ScanStage.uploading) {
+        state = state.copyWith(progress: progress);
+      }
+    }
+
     try {
-      final receipt = await _repository.upload(
-        image,
-        cancelToken: _cancelToken,
-        onProgress: (progress) {
-          // A late callback after cancel/success must not resurrect the progress bar.
-          if (state.stage == ScanStage.uploading) {
-            state = state.copyWith(progress: progress);
-          }
-        },
-      );
+      final target = state.target;
+      final receipt = target.isNewBill
+          ? await _repository.upload(
+              image,
+              cancelToken: _cancelToken,
+              onProgress: reportProgress,
+            )
+          : await _repository.addImage(
+              target.receiptId!,
+              image,
+              cancelToken: _cancelToken,
+              onProgress: reportProgress,
+            );
       state = state.copyWith(
         stage: ScanStage.success,
         receipt: receipt,

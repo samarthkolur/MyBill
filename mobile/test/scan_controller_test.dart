@@ -35,23 +35,58 @@ class _FakeRepository implements ReceiptsRepository {
   final Object? error;
   final List<double> emitProgress;
 
+  /// Records which endpoint the controller actually chose.
+  String? uploadedTo;
+  String? addedToReceiptId;
+
+  Receipt _receipt(String id, int pages) => Receipt(
+    id: id,
+    status: ReceiptStatus.pending,
+    createdAt: DateTime.utc(2026),
+    images: [
+      for (var p = 1; p <= pages; p++)
+        ReceiptImage(
+          id: 'i$p',
+          imageUrl: 'user/$id/page_$p.jpg',
+          pageNumber: p,
+        ),
+    ],
+  );
+
+  Future<Receipt> _respond(
+    void Function(double)? onProgress,
+    Receipt receipt,
+  ) async {
+    for (final p in emitProgress) {
+      onProgress?.call(p);
+    }
+    if (error != null) throw error!;
+    return receipt;
+  }
+
   @override
   Future<Receipt> upload(
     File image, {
     void Function(double progress)? onProgress,
     CancelToken? cancelToken,
-  }) async {
-    for (final p in emitProgress) {
-      onProgress?.call(p);
-    }
-    if (error != null) throw error!;
-    return Receipt(
-      id: 'r1',
-      status: ReceiptStatus.pending,
-      imageUrl: 'user/r1/original.jpg',
-      createdAt: DateTime.utc(2026),
-    );
+  }) {
+    uploadedTo = 'new';
+    return _respond(onProgress, _receipt('r1', 1));
   }
+
+  @override
+  Future<Receipt> addImage(
+    String receiptId,
+    File image, {
+    void Function(double progress)? onProgress,
+    CancelToken? cancelToken,
+  }) {
+    addedToReceiptId = receiptId;
+    return _respond(onProgress, _receipt(receiptId, 2));
+  }
+
+  @override
+  Future<List<Receipt>> list({int limit = 20}) async => [_receipt('r1', 1)];
 }
 
 ScanController buildController({
@@ -166,5 +201,58 @@ void main() {
     expect(controller.state.stage, ScanStage.idle);
     expect(controller.state.image, isNull);
     expect(controller.state.receipt, isNull);
+    // Back to the default so the next scan doesn't silently inherit the last target.
+    expect(controller.state.target.isNewBill, isTrue);
+  });
+
+  // ---- Multi-page: add to an existing bill (decision 24) ----
+
+  test('defaults to creating a new bill', () async {
+    final repository = _FakeRepository();
+    final controller = ScanController(_FakePipeline(result: image), repository);
+
+    await controller.pick(ImageSourceKind.camera);
+    await controller.upload();
+
+    expect(repository.uploadedTo, 'new');
+    expect(repository.addedToReceiptId, isNull);
+  });
+
+  test(
+    'targeting an existing bill appends a page instead of creating one',
+    () async {
+      final repository = _FakeRepository();
+      final controller = ScanController(
+        _FakePipeline(result: image),
+        repository,
+      );
+
+      await controller.pick(ImageSourceKind.camera);
+      controller.setTarget(
+        const ScanTarget.existing(receiptId: 'existing-1', label: 'Bill A'),
+      );
+      await controller.upload();
+
+      // Hit the append endpoint, not upload — the distinction the whole feature rests on.
+      expect(repository.addedToReceiptId, 'existing-1');
+      expect(repository.uploadedTo, isNull);
+      expect(controller.state.stage, ScanStage.success);
+      expect(controller.state.receipt?.pageCount, 2);
+    },
+  );
+
+  test('changing target clears a previous error', () async {
+    final controller = buildController(
+      picked: image,
+      uploadError: apiError('network_error', 'No connection.'),
+    );
+    await controller.pick(ImageSourceKind.camera);
+    await controller.upload();
+    expect(controller.state.error, isNotNull);
+
+    controller.setTarget(const ScanTarget.existing(receiptId: 'r9'));
+
+    // A stale failure must not sit next to a target the user just changed.
+    expect(controller.state.error, isNull);
   });
 }

@@ -15,31 +15,56 @@ enum ReceiptStatus {
   );
 }
 
-/// A receipt as returned right after upload (task 1.3.5).
+/// One page of a receipt.
+class ReceiptImage {
+  const ReceiptImage({
+    required this.id,
+    required this.imageUrl,
+    required this.pageNumber,
+  });
+
+  factory ReceiptImage.fromJson(Map<String, dynamic> json) => ReceiptImage(
+    id: json['id'] as String,
+    // The storage object key, not a fetchable URL — signed URLs are minted on read
+    // in Phase 3 (design decision 19).
+    imageUrl: json['image_url'] as String,
+    pageNumber: json['page_number'] as int? ?? 1,
+  );
+
+  final String id;
+  final String imageUrl;
+  final int pageNumber;
+}
+
+/// A receipt and its pages (task 1.3.5, decision 24).
 ///
-/// Parsed fields (store, date, totals, line items) don't exist until OCR completes in
-/// Phase 2, so this deliberately mirrors only what `POST /v1/receipts/upload` returns.
+/// A receipt holds 1..N pages — a long receipt is photographed in several shots and the
+/// pages are appended to the same bill. Parsed fields (store, date, totals, line items)
+/// don't exist until OCR completes in Phase 2, so this mirrors only what the upload and
+/// list endpoints return.
 class Receipt {
   const Receipt({
     required this.id,
     required this.status,
-    required this.imageUrl,
     required this.createdAt,
+    this.images = const [],
   });
 
   factory Receipt.fromJson(Map<String, dynamic> json) => Receipt(
     id: json['id'] as String,
     status: ReceiptStatus.parse(json['status'] as String?),
-    // The storage object key, not a fetchable URL — signed URLs are minted on read
-    // in Phase 3 (design decision 19).
-    imageUrl: json['image_url'] as String,
     createdAt:
         DateTime.tryParse(json['created_at'] as String? ?? '') ??
         DateTime.now(),
+    images: ((json['images'] as List<dynamic>?) ?? const [])
+        .map((i) => ReceiptImage.fromJson(i as Map<String, dynamic>))
+        .toList(),
   );
 
   final String id;
   final ReceiptStatus status;
-  final String imageUrl;
   final DateTime createdAt;
+  final List<ReceiptImage> images;
+
+  int get pageCount => images.length;
 }

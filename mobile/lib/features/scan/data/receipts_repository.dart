@@ -13,7 +13,7 @@ class ReceiptsRepository {
 
   final Dio _dio;
 
-  /// Uploads [image] and returns the created `pending` receipt.
+  /// Uploads [image] as a **new** bill and returns the created `pending` receipt.
   ///
   /// [onProgress] reports 0.0–1.0 for the progress UI. The pipeline always hands us
   /// JPEG, and the content type is stated explicitly because the backend validates it
@@ -22,7 +22,43 @@ class ReceiptsRepository {
     File image, {
     void Function(double progress)? onProgress,
     CancelToken? cancelToken,
-  }) async {
+  }) => _post('/receipts/upload', image, onProgress, cancelToken);
+
+  /// Appends [image] to an existing bill as its next page (decision 24).
+  ///
+  /// The server assigns the page number. Returns the receipt with all of its pages.
+  Future<Receipt> addImage(
+    String receiptId,
+    File image, {
+    void Function(double progress)? onProgress,
+    CancelToken? cancelToken,
+  }) => _post('/receipts/$receiptId/images', image, onProgress, cancelToken);
+
+  /// The caller's receipts, newest first — the choices for "add to an existing bill".
+  Future<List<Receipt>> list({int limit = 20}) async {
+    final response = await _dio.get<Map<String, dynamic>>(
+      '/receipts',
+      queryParameters: {'limit': limit},
+    );
+    final data = response.data?['data'];
+    if (data is! List) {
+      throw const ApiException(
+        code: 'bad_response',
+        message: 'The server returned an unexpected response.',
+      );
+    }
+    return data
+        .map((r) => Receipt.fromJson(r as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// Shared multipart POST — upload and add-page differ only by path.
+  Future<Receipt> _post(
+    String path,
+    File image,
+    void Function(double progress)? onProgress,
+    CancelToken? cancelToken,
+  ) async {
     final form = FormData.fromMap({
       'file': await MultipartFile.fromFile(
         image.path,
@@ -32,7 +68,7 @@ class ReceiptsRepository {
     });
 
     final response = await _dio.post<Map<String, dynamic>>(
-      '/receipts/upload',
+      path,
       data: form,
       cancelToken: cancelToken,
       onSendProgress: (sent, total) {
