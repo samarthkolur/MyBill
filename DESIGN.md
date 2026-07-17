@@ -71,13 +71,13 @@ for now (mirroring `MyBill.md` §13) and will be broken into tasks as we approac
 
 ### Milestone 1.3 — Camera & Upload
 
-| #     | Task                                                                                              | Status                    |
-| ----- | ------------------------------------------------------------------------------------------------- | ------------------------- |
-| 1.3.1 | Flutter: Scan screen — camera capture + gallery picker                                            | ⏸️ Deferred (Flutter SDK) |
-| 1.3.2 | Flutter: pre-upload crop/rotate (`image_cropper`) + client-side compression (≤2MB, quality 85%)   | ⏸️ Deferred (Flutter SDK) |
-| 1.3.3 | Backend: `POST /v1/receipts/upload` — stores image in Supabase Storage (`receipts/{user_id}/...`) | ✅ Done                   |
-| 1.3.4 | Backend: create `receipts` row with `status = pending` on upload                                  | ✅ Done                   |
-| 1.3.5 | Flutter: wire upload flow end-to-end + progress UI, persisted upload queue for offline retry      | ⏸️ Deferred (Flutter SDK) |
+| #     | Task                                                                                              | Status                                           |
+| ----- | ------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| 1.3.1 | Flutter: Scan screen — camera capture + gallery picker                                            | ✅ Done (via `image_picker`, decision 23)        |
+| 1.3.2 | Flutter: pre-upload crop/rotate (`image_cropper`) + client-side compression (≤2MB, quality 85%)   | ✅ Done                                          |
+| 1.3.3 | Backend: `POST /v1/receipts/upload` — stores image in Supabase Storage (`receipts/{user_id}/...`) | ✅ Done                                          |
+| 1.3.4 | Backend: create `receipts` row with `status = pending` on upload                                  | ✅ Done                                          |
+| 1.3.5 | Flutter: wire upload flow end-to-end + progress UI, persisted upload queue for offline retry      | 🟢 Upload + progress done; offline queue pending |
 
 **Phase 1 exit criteria** (from `MyBill.md`): user can register, log in, photograph a receipt, and see it uploaded.
 
@@ -473,6 +473,23 @@ Pipeline**. See full task list above.
     unless it opts into `AppRoutes.unauthenticated` — and because the rule keys off
     `AuthController` (which mirrors the SDK's auth stream), a session that expires or is
     refreshed in the background is handled by the same path as an explicit sign-out.
+
+23. **Scan capture uses `image_picker` (the OS camera/gallery), not the `camera` package's
+    in-app viewfinder** — a deviation from `MyBill.md` §15/§17.
+    **Why:** the OS camera already solves permissions, lifecycle, orientation, and
+    device-specific quirks, and it gets Phase 1 to its exit criteria (photograph → upload)
+    with a fraction of the code. A branded in-app viewfinder is a UX upgrade we can make
+    later behind the same `ImagePipeline` seam, without touching the upload path.
+
+24. **Multi-image ("add to an existing bill") receipts are deferred; single-image upload
+    ships first.**
+    **Why:** the requirement (raised 2026-07-17) implies multi-page receipts, which the
+    schema cannot represent — `receipts.image_url` is a single `not null` column and the
+    storage key is `{user_id}/{receipt_id}/original.{ext}`, one object per receipt. It also
+    needs a `GET /v1/receipts` list endpoint (Phase 3 work) so the user has bills to choose
+    between; neither exists. Shipping single-image capture first closes Phase 1's exit
+    criteria against the live endpoint, and the multi-page stack lands as a coherent
+    follow-up rather than a half-built client path. See Pending Tasks.
 
 ---
 
