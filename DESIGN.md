@@ -92,12 +92,15 @@ for now (mirroring `MyBill.md` §13) and will be broken into tasks as we approac
 - ✅ **`ReceiptParser` interface + first implementation** — `HeuristicReceiptParser`:
   geometry + regex, OCRResult → CanonicalReceipt (store, date/time, totals, line items),
   preliminary category-by-keyword, low-confidence review flagging
+- ✅ **Normalisation layer (Stage 4)** — `ReceiptNormaliser` writes a CanonicalReceipt to
+  `receipts` + `receipt_items` + `price_history`: alias-aware store resolution, category
+  name→id lookup, idempotent replace-by-receipt, receipt flipped to `done`. New
+  repositories: `reference` (categories/stores), `parsed` (items/price_history)
 - ⬜ Image pre-processing service (resize, deskew, binarise)
-- ⬜ Celery + Redis async job queue
-- ⬜ Category keyword mapping already in the parser; **store alias table (seed 20 chains)**
-  still to add
-- ⬜ Normalisation layer → write CanonicalReceipt to `receipts`, `receipt_items`,
-  `price_history` (Stage 4: name normalisation, store-alias resolution, category-id lookup)
+- ⬜ Celery + Redis async job queue — the orchestration that chains upload → preprocess →
+  OCR → parse → normalise; the four stage components now all exist, unwired
+- ⬜ **Store alias table (seed 20 chains)** — store resolution today matches within a user's
+  own stores (space-insensitive aliases); a global known-chain seed is still to add
 - ⬜ Processing status polling endpoint + Flutter animated processing screen
 
 ## Phase 3 — Digital Bill Viewer (milestone-level)
