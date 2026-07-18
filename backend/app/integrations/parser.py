@@ -386,55 +386,65 @@ def _extract_items(rows: list[list[OCRLine]]) -> list[CanonicalItem]:
     return items
 
 
+# A leading HSN/item code: 4+ digits, optionally followed by a one-letter class code. Common
+# on supermarket receipts ("040610 NANDINI PANEER", "071320 L KABULI CHANA") and not part of
+# the product name.
+_LEADING_CODE_RE = re.compile(r"^\s*\d{4,}\s+(?:[A-Za-z]\s+)?")
+
+# A bare number at the end of the item text — a candidate weight/count ("KABULI CHANA 1.026").
+_TRAILING_NUM_RE = re.compile(r"(\d+(?:\.\d+)?)\s*$")
+
+
 def _row_to_item(text: str, confidence: float) -> CanonicalItem | None:
     """Read one non-summary row as a line item, or ``None`` if it isn't one.
 
-    A line item needs a price *and* a name. The name is whatever text precedes the first
-    money amount; a row with money but no letters (a stray subtotal, a code) is not an item.
+    A line item needs a price *and* a name. The name is the text before the first money
+    amount, minus a leading HSN/item code and the quantity — a row with money but no letters
+    (a stray subtotal, a code) is not an item.
     """
 
     money = _money_values(text)
     if not money:
         return None
 
-    # The name is the text before the first money token; strip the amounts, currency markers,
-    # and a trailing `N x` quantity marker so the stored name is just the product ("Lays Chips
-    # 2 x" → "Lays Chips"). A unit like "1L" is left in place — it's part of the product's
-    # identity, not noise.
-    name = _MONEY_RE.split(text)[0]
-    name = re.sub(r"[₹]|(?:\brs\.?\b)|(?:\binr\b)", "", name, flags=re.IGNORECASE)
-    name = re.sub(r"\s*\d+(?:\.\d+)?\s*[x×]\s*$", "", name, flags=re.IGNORECASE)
-    name = name.strip(" -\t|:")
-    if not re.search(r"[A-Za-z]{2,}", name):
-        return None  # no real product name → not a purchased line
+    # Text before the first money amount, with currency markers and a leading item code
+    # stripped. The quantity is carved out of this separately below so it doesn't end up
+    # glued to the product name.
+    pre = _MONEY_RE.split(text)[0]
+    pre = re.sub(r"[₹]|(?:\brs\.?\b)|(?:\binr\b)", "", pre, flags=re.IGNORECASE)
+    pre = _LEADING_CODE_RE.sub("", pre)
 
-    quantity, unit = _extract_quantity_unit(text)
-
-    # Recover quantity, unit price, and total together — the three columns aren't always all
-    # printed, so each shape fills in the rest:
-    #   `2 x 66.00 132.00` → qty 2, unit 66.00, total 132.00 (both amounts printed)
-    #   `2 x 66.00`        → qty 2, unit 66.00, total derived as 132.00 (no line total)
+    # Recover quantity, unit price, and total. The columns a receipt prints vary:
+    #   `2 x 66.00 132.00` → qty 2, unit 66.00, total 132.00
+    #   `2 x 66.00`        → qty 2, unit 66.00, total derived as 132.00
     #   `62.00 124.00`     → two columns: unit 62.00, total 124.00
+    #   `KABULI CHANA 1.026` @ `116.50 119.53` → qty 1.026 kg (unit × qty reconciles the total)
     #   `66.00`            → a single amount is both unit price and total, at quantity 1
+    unit: str | None
     times = _QTY_TIMES_RE.search(text)
     if times:
+        unit_price = _quantize_money(money[0])
         parsed_qty = _quantize_qty(Decimal(times.group(1)))
         quantity = parsed_qty if _is_sane_quantity(parsed_qty) else Decimal(1)
-        unit_price = _quantize_money(money[0])
         total_price = (
             _quantize_money(money[-1])
             if len(money) >= 2
             else _quantize_money(unit_price * quantity)
         )
-    elif len(money) >= 2:
-        unit_price = _quantize_money(money[0])
-        total_price = _quantize_money(money[-1])
+        unit = None
+        name = re.sub(r"\s*\d+(?:\.\d+)?\s*[x×].*$", "", pre, flags=re.IGNORECASE)
     else:
-        total_price = _quantize_money(money[-1])
-        unit_price = total_price
+        if len(money) >= 2:
+            unit_price = _quantize_money(money[0])
+            total_price = _quantize_money(money[-1])
+        else:
+            total_price = _quantize_money(money[-1])
+            unit_price = total_price
+        quantity, unit, name = _infer_quantity(pre, unit_price, total_price)
 
-    if quantity <= 0:
-        quantity = Decimal(1)
+    name = _clean_name(name)
+    if not re.search(r"[A-Za-z]{2,}", name):
+        return None  # no real product name → not a purchased line
 
     normalised = _normalise_name(name)
     return CanonicalItem(
@@ -450,20 +460,73 @@ def _row_to_item(text: str, confidence: float) -> CanonicalItem | None:
     )
 
 
-def _extract_quantity_unit(text: str) -> tuple[Decimal, str | None]:
-    """A weight/volume/count embedded in the item text (`1.5 kg`), else (1, None)."""
+def _infer_quantity(
+    name: str, unit_price: Decimal, total_price: Decimal
+) -> tuple[Decimal, str | None, str]:
+    """Carve the quantity/weight out of the item text, and return the name without it.
 
-    match = _UNIT_RE.search(text)
-    if not match:
-        return Decimal(1), None
-    quantity = _quantize_qty(Decimal(match.group(1)))
-    if not _is_sane_quantity(quantity):
-        # A number too large to be a real quantity means the unit token was a coincidence
-        # (a product/HSN code that happens to end in g/l/no) — drop it rather than trust it.
-        return Decimal(1), None
-    unit = match.group(2).lower()
-    unit = {"pc": "pcs", "no": "pcs", "nos": "pcs"}.get(unit, unit)
-    return quantity, unit
+    The row's own arithmetic tells a real quantity from a stray number: the quantity is the
+    candidate where ``unit_price × quantity ≈ total_price``. This handles the two shapes a
+    weighed/counted line prints without hard-coding a column layout:
+      ``KABULI CHANA 1.026`` at 116.50/kg = 119.53 → 1.026 kg
+      ``COCONUT 13`` at 25.50 each = 331.50         → 13
+    A number that doesn't reconcile (a pack size like ``200g``) is left in the name.
+    """
+
+    # (value, unit, start, end, is_bare). A *bare* trailing number is a quantity column and
+    # is pulled out even when it's 1 ("… 1"); an embedded "N unit" with value 1 ("1L",
+    # "1 kg") is a pack size — part of the product identity — so it's only treated as the
+    # quantity when it's greater than 1 ("2 kg"). The trailing number is preferred (checked
+    # first), since that column is where a weighed/counted line prints its quantity.
+    candidates: list[tuple[Decimal, str | None, int, int, bool]] = []
+    trailing = _TRAILING_NUM_RE.search(name)
+    if trailing:
+        raw = trailing.group(1)
+        # A decimal reads as a weight in kg; a bare integer is a count with no unit.
+        unit = "kg" if "." in raw else None
+        candidates.append(
+            (_quantize_qty(Decimal(raw)), unit, trailing.start(), trailing.end(), True)
+        )
+    for match in _UNIT_RE.finditer(name):
+        candidates.append(
+            (
+                _quantize_qty(Decimal(match.group(1))),
+                _normalise_unit(match.group(2)),
+                match.start(),
+                match.end(),
+                False,
+            )
+        )
+
+    for value, unit, start, end, is_bare in candidates:
+        if not _is_sane_quantity(value):
+            continue
+        if not is_bare and value == 1:
+            continue  # a "1L"/"1 kg" pack size stays in the name
+        if _matches_total(unit_price, value, total_price):
+            return value, unit, name[:start] + name[end:]
+
+    return Decimal(1), None, name
+
+
+def _matches_total(unit_price: Decimal, quantity: Decimal, total_price: Decimal) -> bool:
+    """Whether ``unit_price × quantity`` reconciles with the printed total, within a small
+    tolerance for the 2dp rounding of both figures."""
+
+    if unit_price <= 0 or quantity <= 0:
+        return False
+    expected = unit_price * quantity
+    tolerance = max(Decimal("0.05"), total_price * Decimal("0.02"))
+    return abs(expected - total_price) <= tolerance
+
+
+def _normalise_unit(unit: str) -> str:
+    unit = unit.lower()
+    return {"pc": "pcs", "no": "pcs", "nos": "pcs"}.get(unit, unit)
+
+
+def _clean_name(name: str) -> str:
+    return re.sub(r"\s+", " ", name).strip(" -\t|:.")
 
 
 def _is_sane_quantity(value: Decimal) -> bool:

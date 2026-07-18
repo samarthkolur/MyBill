@@ -118,15 +118,78 @@ async def test_implausibly_large_quantity_is_rejected() -> None:
     assert item.unit is None
 
 
-async def test_weight_unit_is_extracted() -> None:
+async def test_leading_hsn_code_is_stripped_from_name() -> None:
+    receipt = await _parse(
+        _line("080112 COCONUT", x=20, row=0),
+        _line("25.50", x=320, row=0),
+    )
+    assert receipt.items[0].name == "COCONUT"
+
+
+async def test_weighed_item_pulls_kg_out_of_the_name() -> None:
+    # 116.50/kg × 1.026 kg = 119.53 — the arithmetic identifies 1.026 as the weight, so it
+    # becomes the quantity (kg) instead of being glued to the name.
+    receipt = await _parse(
+        _line("071320 L KABULI CHANA 1.026", x=20, row=0),
+        _line("116.50", x=280, row=0),
+        _line("119.53", x=380, row=0),
+    )
+    item = receipt.items[0]
+    assert item.name == "KABULI CHANA"
+    assert item.quantity == Decimal("1.026")
+    assert item.unit == "kg"
+    assert (item.unit_price, item.total_price) == (Decimal("116.50"), Decimal("119.53"))
+
+
+async def test_counted_item_pulls_count_out_of_the_name() -> None:
+    # 25.50 each × 13 = 331.50 → quantity 13, name clean.
+    receipt = await _parse(
+        _line("080112 COCONUT 13", x=20, row=0),
+        _line("25.50", x=280, row=0),
+        _line("331.50", x=380, row=0),
+    )
+    item = receipt.items[0]
+    assert item.name == "COCONUT"
+    assert item.quantity == Decimal("13")
+
+
+async def test_pack_size_that_does_not_reconcile_stays_in_the_name() -> None:
+    # "200g" is the pack size, not the quantity (89 × 200 ≠ 89); the trailing "1" is the
+    # quantity. The pack size stays as part of the product identity.
+    receipt = await _parse(
+        _line("040610 NANDINI PANEER-200g 1", x=20, row=0),
+        _line("89.00", x=360, row=0),
+    )
+    item = receipt.items[0]
+    assert item.name == "NANDINI PANEER-200g"
+    assert item.quantity == Decimal("1")
+
+
+async def test_unit_one_pack_size_stays_in_the_name() -> None:
+    # "1 kg" here is the pack size (quantity 1), not a separate quantity, so it stays with
+    # the product rather than being pulled out.
     receipt = await _parse(
         _line("SUGAR 1 kg", x=20, row=0),
         _line("55.00", x=320, row=0),
     )
 
     item = receipt.items[0]
-    assert item.unit == "kg"
+    assert item.name == "SUGAR 1 kg"
     assert item.quantity == Decimal("1")
+
+
+async def test_embedded_weight_over_one_is_extracted() -> None:
+    # "2 kg" reconciles (30.00/kg × 2 = 60.00), so it's the quantity, and the name is clean.
+    receipt = await _parse(
+        _line("SUGAR 2 kg", x=20, row=0),
+        _line("30.00", x=280, row=0),
+        _line("60.00", x=380, row=0),
+    )
+
+    item = receipt.items[0]
+    assert item.name == "SUGAR"
+    assert item.quantity == Decimal("2")
+    assert item.unit == "kg"
 
 
 # ---------------------------------------------------------------------------
