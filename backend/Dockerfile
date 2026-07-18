@@ -44,9 +44,18 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # ---------------------------------------------------------------------------
 FROM python:${PYTHON_VERSION}-slim AS runtime
 
-# curl is used by the container HEALTHCHECK below.
+# curl is used by the container HEALTHCHECK below. The libgl/libglib/libx* set is
+# OpenCV's (cv2) runtime dependency — rapidocr pulls in opencv-python, which fails to
+# import on the slim base without these system shared libraries (e.g. libxcb.so.1).
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends curl \
+    && apt-get install -y --no-install-recommends \
+        curl \
+        libgl1 \
+        libglib2.0-0 \
+        libxcb1 \
+        libsm6 \
+        libxext6 \
+        libxrender1 \
     && rm -rf /var/lib/apt/lists/* \
     # Non-root runtime user (never run the app as root).
     && groupadd --system app \
