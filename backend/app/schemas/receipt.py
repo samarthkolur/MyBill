@@ -53,6 +53,25 @@ class ReceiptItem(BaseModel):
     needs_review: bool = False
 
 
+class ItemSearchResult(BaseModel):
+    """A line item matched by search, with the bill it belongs to (MyBill.md §5).
+
+    Carries enough receipt context (store, date, ``receipt_id``) for the client to show a
+    useful result row and link back to the full bill.
+    """
+
+    id: UUID
+    receipt_id: UUID
+    name: str
+    category: str | None = None
+    quantity: Decimal
+    unit: str | None = None
+    unit_price: Decimal
+    total_price: Decimal
+    store_name: str | None = None
+    date: dt.date | None = None
+
+
 class Receipt(BaseModel):
     """A receipt with its pages and (once parsed) its summary fields.
 

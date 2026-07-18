@@ -103,6 +103,12 @@ class StoreRepository:
             raise RuntimeError("Insert of store returned no row.")
         return str(rows[0]["id"])
 
+    async def id_to_name(self, user_id: UUID) -> dict[str, str]:
+        """Map the user's store ids → names, for labelling many rows at once (search)."""
+
+        rows = await self._list_for_user(user_id)
+        return {str(row["id"]): str(row["name"]) for row in rows}
+
     async def name_for(self, store_id: str) -> str | None:
         """The display name of a store by id, for the bill-detail header."""
 

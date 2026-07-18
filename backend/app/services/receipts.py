@@ -26,7 +26,7 @@ from app.repositories.parsed import ReceiptItemRepository
 from app.repositories.receipts import ReceiptImageRepository, ReceiptRepository
 from app.repositories.reference import CategoryRepository, StoreRepository
 from app.schemas.parser import REVIEW_CONFIDENCE_THRESHOLD
-from app.schemas.receipt import Receipt, ReceiptImage, ReceiptItem
+from app.schemas.receipt import ItemSearchResult, Receipt, ReceiptImage, ReceiptItem
 
 logger = get_logger("app.receipts")
 
@@ -238,6 +238,44 @@ class ReceiptService:
                 )
             )
         return items
+
+    async def search_items(
+        self, *, user: AuthenticatedUser, query: str, limit: int = 50
+    ) -> list[ItemSearchResult]:
+        """Search the caller's line items by name, newest first (MyBill.md §5).
+
+        Each result carries its bill's store and date so the client can show a useful row
+        and link back to the full receipt. An empty/whitespace query returns nothing.
+        """
+
+        normalised = query.strip().lower()
+        if not normalised or self._items is None:
+            return []
+
+        rows = await self._items.search(user_id=user.id, query=normalised, limit=limit)
+        store_names = await self._stores.id_to_name(user.id) if self._stores else {}
+        category_names = await self._categories.id_to_name() if self._categories else {}
+
+        results: list[ItemSearchResult] = []
+        for row in rows:
+            receipt = row.get("receipts") or {}
+            store_id = receipt.get("store_id")
+            category_id = row.get("category_id")
+            results.append(
+                ItemSearchResult(
+                    id=row["id"],
+                    receipt_id=row["receipt_id"],
+                    name=row["name"],
+                    category=category_names.get(str(category_id)) if category_id else None,
+                    quantity=row["quantity"],
+                    unit=row.get("unit"),
+                    unit_price=row["unit_price"],
+                    total_price=row["total_price"],
+                    store_name=store_names.get(str(store_id)) if store_id else None,
+                    date=receipt.get("date"),
+                )
+            )
+        return results
 
     async def list_receipts(
         self, *, user: AuthenticatedUser, limit: int = 20, offset: int = 0

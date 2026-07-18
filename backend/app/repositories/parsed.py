@@ -49,6 +49,25 @@ class ReceiptItemRepository:
         )
         return cast("list[dict[str, Any]]", resp.data or [])
 
+    async def search(self, *, user_id: UUID, query: str, limit: int = 50) -> list[dict[str, Any]]:
+        """A user's line items whose name matches ``query`` (case-insensitive substring).
+
+        Each row embeds its receipt's ``date`` and ``store_id`` (a PostgREST join) so a
+        search result can show where and when the item was bought without a second round
+        trip. Newest first.
+        """
+
+        resp = (
+            await self._client.table(_ITEMS_TABLE)
+            .select("*, receipts(date, store_id)")
+            .eq("user_id", str(user_id))
+            .ilike("name_normalised", f"%{query}%")
+            .order("created_at", desc=True)
+            .limit(limit)
+            .execute()
+        )
+        return cast("list[dict[str, Any]]", resp.data or [])
+
 
 class PriceHistoryRepository:
     """Writes for ``public.price_history`` (per-item price observations)."""

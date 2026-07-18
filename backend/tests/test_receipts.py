@@ -152,11 +152,21 @@ class _FakeQueue:
 class _FakeItemsRepo:
     """Stands in for ReceiptItemRepository (read side)."""
 
-    def __init__(self, items: dict[str, list[dict[str, Any]]] | None = None) -> None:
+    def __init__(
+        self,
+        items: dict[str, list[dict[str, Any]]] | None = None,
+        search_rows: list[dict[str, Any]] | None = None,
+    ) -> None:
         self.items = items or {}
+        self.search_rows = search_rows or []
+        self.search_query: str | None = None
 
     async def list_for_receipt(self, *, receipt_id: Any) -> list[dict[str, Any]]:
         return self.items.get(str(receipt_id), [])
+
+    async def search(self, *, user_id: Any, query: str, limit: int = 50) -> list[dict[str, Any]]:
+        self.search_query = query
+        return self.search_rows
 
 
 class _FakeStoresRepo:
@@ -165,6 +175,9 @@ class _FakeStoresRepo:
 
     async def name_for(self, store_id: str) -> str | None:
         return self.names.get(str(store_id))
+
+    async def id_to_name(self, user_id: Any) -> dict[str, str]:
+        return self.names
 
 
 class _FakeCategoriesRepo:
@@ -447,6 +460,49 @@ async def test_get_items_for_unknown_receipt_is_404() -> None:
         await _service(_FakeBucket(), _FakeRepo()).get_receipt_items(
             user=_user(), receipt_id=uuid4()
         )
+
+
+async def test_search_items_returns_results_with_bill_context() -> None:
+    rid = uuid4()
+    rows = [
+        {
+            "id": str(uuid4()),
+            "receipt_id": str(rid),
+            "name": "Amul Taaza Milk",
+            "category_id": "cat-dairy",
+            "quantity": "1.000",
+            "unit": "l",
+            "unit_price": "62.00",
+            "total_price": "62.00",
+            "receipts": {"date": "2026-07-04", "store_id": "store-1"},
+        }
+    ]
+    service = _service(
+        _FakeBucket(),
+        _FakeRepo(),
+        items=_FakeItemsRepo(search_rows=rows),
+        stores=_FakeStoresRepo({"store-1": "DMart"}),
+        categories=_FakeCategoriesRepo({"cat-dairy": "Dairy"}),
+    )
+
+    results = await service.search_items(user=_user(), query="  MILK ")
+
+    assert len(results) == 1
+    result = results[0]
+    assert result.name == "Amul Taaza Milk"
+    assert result.category == "Dairy"
+    assert result.store_name == "DMart"  # store id resolved
+    assert str(result.date) == "2026-07-04"  # date embedded from the receipt
+    assert result.receipt_id == rid
+
+
+async def test_blank_search_returns_nothing_without_querying() -> None:
+    items = _FakeItemsRepo(search_rows=[{"id": "x"}])
+    result = await _service(_FakeBucket(), _FakeRepo(), items=items).search_items(
+        user=_user(), query="   "
+    )
+    assert result == []
+    assert items.search_query is None  # never hit the repository
 
 
 async def test_list_receipts_includes_pages() -> None:
