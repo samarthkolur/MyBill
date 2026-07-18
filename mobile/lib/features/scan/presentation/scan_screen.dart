@@ -26,17 +26,11 @@ class ScanScreen extends ConsumerWidget {
         return;
       }
       final receipt = next.receipt;
-      // A new bill goes straight to the processing screen to watch OCR run — replacing the
-      // scan screen so back from processing (or the bill) lands on home, not this capture.
-      // Adding a page to an existing bill just confirms with a snackbar.
-      if (next.target.isNewBill && receipt != null) {
-        context.pushReplacement(AppRoutes.processingFor(receipt.id));
-      } else {
-        final pages = receipt?.pageCount ?? 1;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Page $pages added to the bill.')),
-        );
-      }
+      if (receipt == null) return;
+      // Whether this started a new bill or added a page to an existing one, the receipt is
+      // now (re)processing — go watch it. pushReplacement so back from processing (or the
+      // bill) lands on home, not this capture screen.
+      context.pushReplacement(AppRoutes.processingFor(receipt.id));
     });
 
     return Scaffold(

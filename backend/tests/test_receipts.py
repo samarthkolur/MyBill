@@ -308,6 +308,17 @@ async def test_add_image_appends_next_page() -> None:
     assert bucket.uploaded[1].endswith("/page_2.jpg")
 
 
+async def test_add_image_reenqueues_processing() -> None:
+    bucket, repo, images, queue = _FakeBucket(), _FakeRepo(), _FakeImages(), _FakeQueue()
+    user = _user()
+    service = _service(bucket, repo, images, queue)
+    created = await service.upload_receipt(user=user, data=b"p1", content_type="image/jpeg")
+    await service.add_image(user=user, receipt_id=created.id, data=b"p2", content_type="image/jpeg")
+
+    # Upload enqueues once, and adding a page re-enqueues so the new page gets parsed too.
+    assert queue.enqueued == [(created.id, user.id), (created.id, user.id)]
+
+
 async def test_add_image_to_unknown_receipt_is_404() -> None:
     with pytest.raises(NotFoundError):
         await _service(_FakeBucket(), _FakeRepo(), _FakeImages()).add_image(

@@ -158,6 +158,12 @@ class ReceiptService:
             "receipt_page_added",
             extra={"receipt_id": str(receipt_id), "page_number": page_number},
         )
+        # Re-run the pipeline so the new page's items are folded into the bill. Processing is
+        # idempotent (it re-reads every page and replaces the receipt's rows), so a re-run
+        # converges on the full, combined set rather than duplicating the earlier pages.
+        if self._queue is not None:
+            self._queue.enqueue_receipt_processing(receipt_id=receipt_id, user_id=user.id)
+
         images = [ReceiptImage.model_validate(i) for i in existing] + [image]
         return Receipt(**row, images=images)
 
