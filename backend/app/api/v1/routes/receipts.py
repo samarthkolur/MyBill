@@ -8,7 +8,7 @@ from fastapi import APIRouter, File, Query, UploadFile, status
 
 from app.api.deps import CurrentUserDep, ReceiptServiceDep
 from app.core.responses import ApiResponse, success
-from app.schemas.receipt import Receipt
+from app.schemas.receipt import Receipt, ReceiptItem
 
 router = APIRouter(prefix="/receipts", tags=["receipts"])
 
@@ -88,6 +88,27 @@ async def get_receipt(
 
     receipt = await receipts.get_receipt(user=user, receipt_id=receipt_id)
     return success(receipt)
+
+
+@router.get(
+    "/{receipt_id}/items",
+    response_model=ApiResponse[list[ReceiptItem]],
+    summary="Get a receipt's parsed line items",
+)
+async def get_receipt_items(
+    receipt_id: UUID,
+    user: CurrentUserDep,
+    receipts: ReceiptServiceDep,
+) -> ApiResponse[list[ReceiptItem]]:
+    """The parsed line items of a receipt the caller owns — the bill-detail body.
+
+    Empty until OCR completes. Category ids are resolved to names for direct rendering.
+
+    Errors (standard envelope): 401, 404 (no such receipt for this user).
+    """
+
+    items = await receipts.get_receipt_items(user=user, receipt_id=receipt_id)
+    return success(items, total=len(items))
 
 
 @router.get(

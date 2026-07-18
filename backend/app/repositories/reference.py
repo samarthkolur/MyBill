@@ -50,6 +50,13 @@ class CategoryRepository:
         rows = cast("list[dict[str, Any]]", resp.data or [])
         return {str(row["name"]).lower(): str(row["id"]) for row in rows}
 
+    async def id_to_name(self) -> dict[str, str]:
+        """Map category id → name, for labelling line items on the bill-detail read."""
+
+        resp = await self._client.table(_CATEGORIES_TABLE).select("id, name").execute()
+        rows = cast("list[dict[str, Any]]", resp.data or [])
+        return {str(row["id"]): str(row["name"]) for row in rows}
+
 
 class StoreRepository:
     """Resolves and creates per-user ``stores`` rows."""
@@ -95,6 +102,19 @@ class StoreRepository:
         if not rows:
             raise RuntimeError("Insert of store returned no row.")
         return str(rows[0]["id"])
+
+    async def name_for(self, store_id: str) -> str | None:
+        """The display name of a store by id, for the bill-detail header."""
+
+        resp = (
+            await self._client.table(_STORES_TABLE)
+            .select("name")
+            .eq("id", store_id)
+            .limit(1)
+            .execute()
+        )
+        rows = cast("list[dict[str, Any]]", resp.data or [])
+        return str(rows[0]["name"]) if rows else None
 
     async def _list_for_user(self, user_id: UUID) -> list[dict[str, Any]]:
         resp = (

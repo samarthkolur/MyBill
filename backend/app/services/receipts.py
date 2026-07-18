@@ -22,8 +22,11 @@ from app.core.exceptions import (
 from app.core.logging import get_logger
 from app.core.security import AuthenticatedUser
 from app.integrations.tasks import TaskQueue
+from app.repositories.parsed import ReceiptItemRepository
 from app.repositories.receipts import ReceiptImageRepository, ReceiptRepository
-from app.schemas.receipt import Receipt, ReceiptImage
+from app.repositories.reference import CategoryRepository, StoreRepository
+from app.schemas.parser import REVIEW_CONFIDENCE_THRESHOLD
+from app.schemas.receipt import Receipt, ReceiptImage, ReceiptItem
 
 logger = get_logger("app.receipts")
 
@@ -54,6 +57,10 @@ class ReceiptService:
         repository: ReceiptRepository,
         images: ReceiptImageRepository,
         queue: TaskQueue | None = None,
+        *,
+        stores: StoreRepository | None = None,
+        categories: CategoryRepository | None = None,
+        items: ReceiptItemRepository | None = None,
     ):
         self._client = client
         self._repository = repository
@@ -61,6 +68,11 @@ class ReceiptService:
         # Optional so the service stays usable without a broker (unit tests, or a deployment
         # that runs OCR out of band). When set, a new upload kicks off background processing.
         self._queue = queue
+        # Read-side repositories for the bill-detail views (store name + item categories).
+        # Optional so the upload path can be constructed without them.
+        self._stores = stores
+        self._categories = categories
+        self._items = items
 
     async def upload_receipt(
         self, *, user: AuthenticatedUser, data: bytes, content_type: str | None
@@ -165,7 +177,61 @@ class ReceiptService:
         if row is None:
             raise NotFoundError("Receipt not found.")
         images = await self._images.list_for_receipt(receipt_id=receipt_id)
-        return Receipt(**row, images=[ReceiptImage.model_validate(i) for i in images])
+
+        # Resolve the store's display name once the parser has assigned one. No lookup while
+        # pending (store_id is null then), so this doesn't slow the status poll.
+        store_name: str | None = None
+        store_id = row.get("store_id")
+        if store_id and self._stores is not None:
+            store_name = await self._stores.name_for(str(store_id))
+
+        return Receipt(
+            **row,
+            store_name=store_name,
+            images=[ReceiptImage.model_validate(i) for i in images],
+        )
+
+    async def get_receipt_items(
+        self, *, user: AuthenticatedUser, receipt_id: UUID
+    ) -> list[ReceiptItem]:
+        """The parsed line items of one of the caller's receipts (bill detail, MyBill.md §5).
+
+        Category ids are resolved to names so the client can render them directly, and a
+        low-confidence line is flagged for the review-highlight UI.
+
+        Raises:
+            NotFoundError: no such receipt for this user (404).
+        """
+
+        row = await self._repository.get_owned(receipt_id=receipt_id, user_id=user.id)
+        if row is None:
+            raise NotFoundError("Receipt not found.")
+        if self._items is None:
+            return []
+
+        rows = await self._items.list_for_receipt(receipt_id=receipt_id)
+        category_names = await self._categories.id_to_name() if self._categories else {}
+
+        items: list[ReceiptItem] = []
+        for it in rows:
+            confidence = it.get("ocr_confidence")
+            category_id = it.get("category_id")
+            items.append(
+                ReceiptItem(
+                    id=it["id"],
+                    name=it["name"],
+                    brand=it.get("brand"),
+                    category=category_names.get(str(category_id)) if category_id else None,
+                    quantity=it["quantity"],
+                    unit=it.get("unit"),
+                    unit_price=it["unit_price"],
+                    total_price=it["total_price"],
+                    ocr_confidence=confidence,
+                    needs_review=confidence is not None
+                    and float(confidence) < REVIEW_CONFIDENCE_THRESHOLD,
+                )
+            )
+        return items
 
     async def list_receipts(
         self, *, user: AuthenticatedUser, limit: int = 20, offset: int = 0

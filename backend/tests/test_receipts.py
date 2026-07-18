@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
+from decimal import Decimal
 from typing import Any
 from uuid import uuid4
 
@@ -148,6 +149,32 @@ class _FakeQueue:
         self.enqueued.append((receipt_id, user_id))
 
 
+class _FakeItemsRepo:
+    """Stands in for ReceiptItemRepository (read side)."""
+
+    def __init__(self, items: dict[str, list[dict[str, Any]]] | None = None) -> None:
+        self.items = items or {}
+
+    async def list_for_receipt(self, *, receipt_id: Any) -> list[dict[str, Any]]:
+        return self.items.get(str(receipt_id), [])
+
+
+class _FakeStoresRepo:
+    def __init__(self, names: dict[str, str] | None = None) -> None:
+        self.names = names or {}
+
+    async def name_for(self, store_id: str) -> str | None:
+        return self.names.get(str(store_id))
+
+
+class _FakeCategoriesRepo:
+    def __init__(self, names: dict[str, str] | None = None) -> None:
+        self.names = names or {}
+
+    async def id_to_name(self) -> dict[str, str]:
+        return self.names
+
+
 def _user() -> AuthenticatedUser:
     return AuthenticatedUser(id=uuid4(), email="u@example.com", role="authenticated", claims={})
 
@@ -157,8 +184,20 @@ def _service(
     repo: _FakeRepo,
     images: _FakeImages | None = None,
     queue: _FakeQueue | None = None,
+    *,
+    items: _FakeItemsRepo | None = None,
+    stores: _FakeStoresRepo | None = None,
+    categories: _FakeCategoriesRepo | None = None,
 ) -> ReceiptService:
-    return ReceiptService(_FakeClient(bucket), repo, images or _FakeImages(), queue)  # type: ignore[arg-type]
+    return ReceiptService(  # type: ignore[arg-type]
+        _FakeClient(bucket),
+        repo,
+        images or _FakeImages(),
+        queue,
+        stores=stores,
+        categories=categories,
+        items=items,
+    )
 
 
 # ---- Validation ----
@@ -329,6 +368,74 @@ async def test_get_another_users_receipt_is_404() -> None:
     # Reads as absent, not forbidden — an id is never confirmed to a non-owner.
     with pytest.raises(NotFoundError):
         await service.get_receipt(user=_user(), receipt_id=owner.id)
+
+
+def _done_receipt_row(receipt_id: Any, user_id: Any, **parsed: Any) -> dict[str, Any]:
+    return {
+        "id": str(receipt_id),
+        "user_id": str(user_id),
+        "status": "done",
+        "created_at": "2026-07-16T00:00:00+00:00",
+        **parsed,
+    }
+
+
+def _item_row(name: str, *, category_id: str | None, confidence: float) -> dict[str, Any]:
+    return {
+        "id": str(uuid4()),
+        "name": name,
+        "brand": None,
+        "category_id": category_id,
+        "quantity": "1.000",
+        "unit": None,
+        "unit_price": "10.00",
+        "total_price": "10.00",
+        "ocr_confidence": confidence,
+    }
+
+
+async def test_get_receipt_resolves_store_name_and_parsed_fields() -> None:
+    rid, user = uuid4(), _user()
+    repo = _FakeRepo(
+        rows={str(rid): _done_receipt_row(rid, user.id, store_id="store-1", total="438.00")}
+    )
+    service = _service(_FakeBucket(), repo, stores=_FakeStoresRepo({"store-1": "DMart"}))
+
+    receipt = await service.get_receipt(user=user, receipt_id=rid)
+
+    assert receipt.store_name == "DMart"
+    assert receipt.total == Decimal("438.00")
+
+
+async def test_get_receipt_items_resolves_categories_and_flags_low_confidence() -> None:
+    rid, user = uuid4(), _user()
+    repo = _FakeRepo(rows={str(rid): _done_receipt_row(rid, user.id)})
+    items = _FakeItemsRepo(
+        {
+            str(rid): [
+                _item_row("Amul Milk", category_id="cat-dairy", confidence=0.98),
+                _item_row("Smudged Line", category_id=None, confidence=0.40),
+            ]
+        }
+    )
+    categories = _FakeCategoriesRepo({"cat-dairy": "Dairy"})
+    service = _service(_FakeBucket(), repo, items=items, categories=categories)
+
+    result = await service.get_receipt_items(user=user, receipt_id=rid)
+
+    assert [i.name for i in result] == ["Amul Milk", "Smudged Line"]
+    assert result[0].category == "Dairy"
+    assert result[0].needs_review is False
+    # No category resolved, and low confidence → flagged for review.
+    assert result[1].category is None
+    assert result[1].needs_review is True
+
+
+async def test_get_items_for_unknown_receipt_is_404() -> None:
+    with pytest.raises(NotFoundError):
+        await _service(_FakeBucket(), _FakeRepo()).get_receipt_items(
+            user=_user(), receipt_id=uuid4()
+        )
 
 
 async def test_list_receipts_includes_pages() -> None:

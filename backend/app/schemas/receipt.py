@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+import datetime as dt
+from decimal import Decimal
 from enum import StrEnum
 from uuid import UUID
 
@@ -29,21 +30,50 @@ class ReceiptImage(BaseModel):
     receipt_id: UUID
     image_url: str
     page_number: int
-    created_at: datetime
+    created_at: dt.datetime
+
+
+class ReceiptItem(BaseModel):
+    """A parsed line item (``public.receipt_items``) — the bill-detail read model.
+
+    ``category`` is the resolved category *name* (e.g. "Dairy"), not the id, so the client
+    can render it without a second lookup. ``needs_review`` flags a low-confidence line for
+    the UI to highlight (MyBill.md §6).
+    """
+
+    id: UUID
+    name: str
+    brand: str | None = None
+    category: str | None = None
+    quantity: Decimal
+    unit: str | None = None
+    unit_price: Decimal
+    total_price: Decimal
+    ocr_confidence: float | None = None
+    needs_review: bool = False
 
 
 class Receipt(BaseModel):
-    """A receipt and its pages.
+    """A receipt with its pages and (once parsed) its summary fields.
 
     A receipt holds 1..N images (decision 24): the first is created at upload, further
-    pages are appended for receipts too long to photograph in one shot. Parsed fields
-    (store, date, totals, items) are absent until OCR completes and are added to the read
-    models in Phase 2/3.
+    pages are appended for receipts too long to photograph in one shot. The parsed summary
+    fields (store, date, totals) are null until OCR completes; line items are read
+    separately via the items endpoint rather than joined onto every list row.
     """
 
     id: UUID
     status: ReceiptStatus
-    created_at: datetime
+    created_at: dt.datetime
+    # Parsed summary — populated from the row once status is done; null while pending.
+    store_name: str | None = None
+    date: dt.date | None = None
+    time: dt.time | None = None
+    total: Decimal | None = None
+    tax: Decimal | None = None
+    discount: Decimal | None = None
+    payment_method: str | None = None
+    ocr_confidence: float | None = None
     # Ordered by page number. A receipt created via upload always has at least one.
     images: list[ReceiptImage] = []
 

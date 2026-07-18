@@ -20,7 +20,9 @@ from app.core.config import Settings
 from app.core.exceptions import ServiceUnavailableError, UnauthorizedError
 from app.core.security import AuthenticatedUser, AuthError, JwtVerifier
 from app.integrations.tasks import CeleryTaskQueue
+from app.repositories.parsed import ReceiptItemRepository
 from app.repositories.receipts import ReceiptImageRepository, ReceiptRepository
+from app.repositories.reference import CategoryRepository, StoreRepository
 from app.repositories.users import UserRepository
 from app.services.receipts import ReceiptService
 from app.services.users import UserService
@@ -106,6 +108,9 @@ def get_receipt_service(
         ReceiptRepository(supabase),
         ReceiptImageRepository(supabase),
         CeleryTaskQueue(),
+        stores=StoreRepository(supabase),
+        categories=CategoryRepository(supabase),
+        items=ReceiptItemRepository(supabase),
     )
 
 
