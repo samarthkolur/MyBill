@@ -65,8 +65,8 @@ void main() {
 
     await _pump(tester, repo);
 
-    expect(find.text('DMart'), findsOneWidget);
-    expect(find.text('₹438.00'), findsOneWidget); // header total
+    expect(find.text('DMART'), findsOneWidget); // store header, upper-cased
+    expect(find.text('₹438.00'), findsOneWidget); // TOTAL row
     expect(find.text('Amul Milk'), findsOneWidget);
     expect(find.text('Brown Bread'), findsOneWidget);
     expect(find.text('₹62.00'), findsOneWidget); // an item total

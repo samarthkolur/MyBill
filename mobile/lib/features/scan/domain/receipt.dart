@@ -88,7 +88,10 @@ class Receipt {
     required this.createdAt,
     this.storeName,
     this.date,
+    this.time,
     this.total,
+    this.tax,
+    this.discount,
     this.paymentMethod,
     this.images = const [],
   });
@@ -101,7 +104,11 @@ class Receipt {
         DateTime.now(),
     storeName: json['store_name'] as String?,
     date: DateTime.tryParse(json['date'] as String? ?? ''),
+    // Backend sends "HH:MM:SS"; keep just HH:MM for display.
+    time: _shortTime(json['time'] as String?),
     total: _toDouble(json['total']),
+    tax: _toDouble(json['tax']),
+    discount: _toDouble(json['discount']),
     paymentMethod: json['payment_method'] as String?,
     images: ((json['images'] as List<dynamic>?) ?? const [])
         .map((i) => ReceiptImage.fromJson(i as Map<String, dynamic>))
@@ -115,7 +122,10 @@ class Receipt {
   /// Parsed summary — null until OCR completes.
   final String? storeName;
   final DateTime? date;
+  final String? time;
   final double? total;
+  final double? tax;
+  final double? discount;
   final String? paymentMethod;
 
   final List<ReceiptImage> images;
@@ -131,3 +141,10 @@ double? _toDouble(Object? value) => switch (value) {
   final String s => double.tryParse(s),
   _ => null,
 };
+
+/// "18:42:00" → "18:42"; null/blank stays null.
+String? _shortTime(String? value) {
+  if (value == null || value.isEmpty) return null;
+  final parts = value.split(':');
+  return parts.length >= 2 ? '${parts[0]}:${parts[1]}' : value;
+}
