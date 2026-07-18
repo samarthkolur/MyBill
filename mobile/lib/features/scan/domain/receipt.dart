@@ -75,6 +75,44 @@ class ReceiptItem {
   final bool needsReview;
 }
 
+/// A search hit: a line item plus the bill it came from (`GET /search/items`).
+class ItemSearchResult {
+  const ItemSearchResult({
+    required this.id,
+    required this.receiptId,
+    required this.name,
+    required this.quantity,
+    required this.totalPrice,
+    this.category,
+    this.unit,
+    this.storeName,
+    this.date,
+  });
+
+  factory ItemSearchResult.fromJson(Map<String, dynamic> json) =>
+      ItemSearchResult(
+        id: json['id'] as String,
+        receiptId: json['receipt_id'] as String,
+        name: json['name'] as String? ?? '',
+        quantity: _toDouble(json['quantity']) ?? 1,
+        totalPrice: _toDouble(json['total_price']) ?? 0,
+        category: json['category'] as String?,
+        unit: json['unit'] as String?,
+        storeName: json['store_name'] as String?,
+        date: DateTime.tryParse(json['date'] as String? ?? ''),
+      );
+
+  final String id;
+  final String receiptId;
+  final String name;
+  final double quantity;
+  final double totalPrice;
+  final String? category;
+  final String? unit;
+  final String? storeName;
+  final DateTime? date;
+}
+
 /// A receipt: its pages and, once OCR completes, its parsed summary (task 1.3.5,
 /// decision 24; Phase 3 bill viewer).
 ///

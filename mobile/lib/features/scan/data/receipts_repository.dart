@@ -52,6 +52,27 @@ class ReceiptsRepository {
     return Receipt.fromJson(data);
   }
 
+  /// Search the caller's purchased items by name.
+  Future<List<ItemSearchResult>> searchItems(
+    String query, {
+    int limit = 50,
+  }) async {
+    final response = await _dio.get<Map<String, dynamic>>(
+      '/search/items',
+      queryParameters: {'q': query, 'limit': limit},
+    );
+    final data = response.data?['data'];
+    if (data is! List) {
+      throw const ApiException(
+        code: 'bad_response',
+        message: 'The server returned an unexpected response.',
+      );
+    }
+    return data
+        .map((i) => ItemSearchResult.fromJson(i as Map<String, dynamic>))
+        .toList();
+  }
+
   /// The parsed line items of a receipt (bill detail).
   Future<List<ReceiptItem>> items(String receiptId) async {
     final response = await _dio.get<Map<String, dynamic>>(

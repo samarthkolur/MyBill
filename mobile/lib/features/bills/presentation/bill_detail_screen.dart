@@ -205,8 +205,11 @@ class _Totals extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final itemsSum = items.fold<double>(0, (sum, i) => sum + i.totalPrice);
-    // The printed total when OCR found one, else the sum of the lines.
-    final total = receipt.total ?? itemsSum;
+    final tax = receipt.tax ?? 0;
+    final discount = receipt.discount ?? 0;
+    // The printed total when OCR found one, else a computed one that actually adds up
+    // (line sum + tax − discount) so the receipt reconciles.
+    final total = receipt.total ?? (itemsSum + tax - discount);
 
     return Column(
       children: [

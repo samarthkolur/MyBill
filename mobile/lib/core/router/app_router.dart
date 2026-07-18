@@ -10,6 +10,7 @@ import 'package:mybill/features/bills/presentation/bill_detail_screen.dart';
 import 'package:mybill/features/home/presentation/home_screen.dart';
 import 'package:mybill/features/processing/presentation/processing_screen.dart';
 import 'package:mybill/features/scan/presentation/scan_screen.dart';
+import 'package:mybill/features/search/presentation/search_screen.dart';
 import 'package:mybill/features/splash/presentation/splash_screen.dart';
 
 /// Route path constants — referenced by name so navigation call-sites don't hard-code
@@ -25,6 +26,7 @@ class AppRoutes {
   static const String scan = '/scan';
   static const String processing = '/processing';
   static const String bills = '/bills';
+  static const String search = '/search-items';
 
   /// Build the processing route for a specific receipt.
   static String processingFor(String receiptId) => '$processing/$receiptId';
@@ -116,6 +118,11 @@ final routerProvider = Provider<GoRouter>((ref) {
         name: 'bill',
         builder: (context, state) =>
             BillDetailScreen(receiptId: state.pathParameters['receiptId']!),
+      ),
+      GoRoute(
+        path: AppRoutes.search,
+        name: 'search',
+        builder: (context, state) => const SearchScreen(),
       ),
     ],
   );
