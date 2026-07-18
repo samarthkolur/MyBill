@@ -4,4 +4,9 @@
          to allow setting breakpoints, to provide hot reload, etc.
     -->
     <uses-permission android:name="android.permission.INTERNET"/>
+
+    <!-- Debug-only: allow cleartext (http://) so the app can reach a locally-running
+         backend over the LAN (e.g. http://<host-ip>:8000 from docker compose). Release
+         builds inherit the main manifest, which has no cleartext allowance. -->
+    <application android:usesCleartextTraffic="true"/>
 </manifest>
