@@ -166,8 +166,8 @@ class _FakeItemsRepo:
     async def list_for_receipt(self, *, receipt_id: Any) -> list[dict[str, Any]]:
         return self.items.get(str(receipt_id), [])
 
-    async def counts_by_receipt(self, *, user_id: Any) -> dict[str, int]:
-        return self.counts
+    async def summaries_by_receipt(self, *, user_id: Any) -> dict[str, tuple[int, Decimal]]:
+        return {rid: (count, Decimal("10.00") * count) for rid, count in self.counts.items()}
 
     async def search(self, *, user_id: Any, query: str, limit: int = 50) -> list[dict[str, Any]]:
         self.search_query = query

@@ -12,6 +12,7 @@ owner policies still hold for data written by a system (non-user) operation.
 
 from __future__ import annotations
 
+from decimal import Decimal
 from typing import Any, cast
 from uuid import UUID
 
@@ -49,24 +50,26 @@ class ReceiptItemRepository:
         )
         return cast("list[dict[str, Any]]", resp.data or [])
 
-    async def counts_by_receipt(self, *, user_id: UUID) -> dict[str, int]:
-        """Map ``receipt_id`` → number of line items, for the bills list.
+    async def summaries_by_receipt(self, *, user_id: UUID) -> dict[str, tuple[int, Decimal]]:
+        """Map ``receipt_id`` → (item count, summed line total), for the bills list.
 
-        One query for the user's items, counted in memory — cheaper than a per-receipt
-        count query for a personal-scale dataset.
+        One query for the user's items, aggregated in memory — cheaper than a per-receipt
+        query for a personal-scale dataset. The summed total backs the list display when a
+        receipt has no printed total.
         """
 
         resp = (
             await self._client.table(_ITEMS_TABLE)
-            .select("receipt_id")
+            .select("receipt_id, total_price")
             .eq("user_id", str(user_id))
             .execute()
         )
-        counts: dict[str, int] = {}
+        summaries: dict[str, tuple[int, Decimal]] = {}
         for row in cast("list[dict[str, Any]]", resp.data or []):
             key = str(row["receipt_id"])
-            counts[key] = counts.get(key, 0) + 1
-        return counts
+            count, total = summaries.get(key, (0, Decimal(0)))
+            summaries[key] = (count + 1, total + Decimal(str(row["total_price"])))
+        return summaries
 
     async def search(self, *, user_id: UUID, query: str, limit: int = 50) -> list[dict[str, Any]]:
         """A user's line items whose name matches ``query`` (case-insensitive substring).
