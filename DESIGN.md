@@ -114,10 +114,14 @@ for now (mirroring `MyBill.md` §13) and will be broken into tasks as we approac
 
 ## Phase 3 — Digital Bill Viewer (milestone-level)
 
-- Bill list + bill detail screens
-- Inline item correction UI + `PATCH` endpoint
-- Search endpoint + search screen
-- Receipt soft-delete, low-confidence review highlighting
+- ✅ **Bill list + bill detail screens** — home is the bills list (newest first, per-status
+  trailing: total / spinner / error); the detail screen shows the store/date/total header
+  and parsed line items. Backed by `GET /receipts`, `GET /receipts/{id}` (expanded read
+  model with parsed summary fields), and `GET /receipts/{id}/items` (categories resolved to
+  names, low-confidence lines flagged). Review highlighting on items is done here.
+- ⬜ Inline item correction UI + `PATCH` endpoint
+- ⬜ Search endpoint + search screen
+- ⬜ Receipt soft-delete (low-confidence review highlighting landed with the detail screen)
 
 ## Phase 4 — Analytics & Charts (milestone-level)
 
