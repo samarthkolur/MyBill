@@ -99,8 +99,12 @@ for now (mirroring `MyBill.md` §13) and will be broken into tasks as we approac
 - ✅ **Celery + Redis async job queue** — `ReceiptPipeline` chains OCR → parse → normalise
   (multi-page receipts stacked into one document); `app/worker.py` is the Celery app +
   `process_receipt` task; a successful upload enqueues via the `TaskQueue` seam. Compose
-  `worker` enabled; image installs the `ocr` group. **Not yet run in-container against live
-  Redis + real OCR** (needs a docker build with ONNX model download).
+  `worker` enabled; image installs the `ocr` group. **Verified in-container**: the stack
+  builds and boots (api/redis/worker all healthy, worker connected to Redis), and RapidOCR
+  reads a sample receipt at ~0.99 confidence → correct CanonicalReceipt. The build surfaced
+  a real gap — OpenCV's system libs were missing on the slim base — now fixed in the
+  Dockerfile. (The full Celery→Storage→DB round-trip against a live auth user is best
+  exercised via the phone E2E.)
 - ✅ **Processing status polling** — `GET /receipts/{id}` returns the receipt's status;
   the Flutter processing screen (route `/processing/:receiptId`) polls it after a new-bill
   upload, animating a "reading" state until done/failed with retry on timeout
