@@ -6,6 +6,7 @@ import 'package:mybill/features/auth/application/auth_controller.dart';
 import 'package:mybill/features/auth/presentation/forgot_password_screen.dart';
 import 'package:mybill/features/auth/presentation/login_screen.dart';
 import 'package:mybill/features/auth/presentation/signup_screen.dart';
+import 'package:mybill/features/bills/presentation/bill_detail_screen.dart';
 import 'package:mybill/features/home/presentation/home_screen.dart';
 import 'package:mybill/features/processing/presentation/processing_screen.dart';
 import 'package:mybill/features/scan/presentation/scan_screen.dart';
@@ -23,9 +24,13 @@ class AppRoutes {
   static const String home = '/';
   static const String scan = '/scan';
   static const String processing = '/processing';
+  static const String bills = '/bills';
 
   /// Build the processing route for a specific receipt.
   static String processingFor(String receiptId) => '$processing/$receiptId';
+
+  /// Build the bill-detail route for a specific receipt.
+  static String billFor(String receiptId) => '$bills/$receiptId';
 
   /// Routes reachable while signed out. Everything else requires a session.
   static const Set<String> unauthenticated = {login, signUp, forgotPassword};
@@ -105,6 +110,12 @@ final routerProvider = Provider<GoRouter>((ref) {
         name: 'processing',
         builder: (context, state) =>
             ProcessingScreen(receiptId: state.pathParameters['receiptId']!),
+      ),
+      GoRoute(
+        path: '${AppRoutes.bills}/:receiptId',
+        name: 'bill',
+        builder: (context, state) =>
+            BillDetailScreen(receiptId: state.pathParameters['receiptId']!),
       ),
     ],
   );

@@ -5,7 +5,10 @@ import 'package:mybill/core/theme/app_theme.dart';
 /// Both families are bundled app assets (pubspec `fonts:`), so this also guards
 /// against the theme silently falling back to the platform default.
 void main() {
-  for (final entry in {'light': AppTheme.light, 'dark': AppTheme.dark}.entries) {
+  for (final entry in {
+    'light': AppTheme.light,
+    'dark': AppTheme.dark,
+  }.entries) {
     group('${entry.key} theme typography', () {
       final text = entry.value.textTheme;
 

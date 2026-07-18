@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:mybill/core/router/app_router.dart';
+import 'package:mybill/features/bills/application/bills_providers.dart';
 import 'package:mybill/features/processing/application/processing_controller.dart';
 import 'package:mybill/features/scan/domain/receipt.dart';
 
@@ -23,6 +24,19 @@ class ProcessingScreen extends ConsumerWidget {
       processingControllerProvider(receiptId).notifier,
     );
 
+    // Refresh the bills list so the just-finished receipt appears, then navigate. Both
+    // paths invalidate: home is still mounted under this screen, so its cached list would
+    // otherwise miss the new bill.
+    void goToBills() {
+      ref.invalidate(receiptsListProvider);
+      context.go(AppRoutes.home);
+    }
+
+    void viewBill() {
+      ref.invalidate(receiptsListProvider);
+      context.pushReplacement(AppRoutes.billFor(receiptId));
+    }
+
     return Scaffold(
       appBar: AppBar(title: const Text('Reading receipt')),
       body: SafeArea(
@@ -32,17 +46,18 @@ class ProcessingScreen extends ConsumerWidget {
             child: switch (state.phase) {
               ProcessingPhase.working => _Working(status: state.status),
               ProcessingPhase.done => _Done(
-                onContinue: () => context.go(AppRoutes.home),
+                onContinue: viewBill,
+                onHome: goToBills,
               ),
               ProcessingPhase.failed => _Failed(
                 message: state.error,
                 onRescan: () => context.go(AppRoutes.scan),
-                onHome: () => context.go(AppRoutes.home),
+                onHome: goToBills,
               ),
               ProcessingPhase.timedOut || ProcessingPhase.error => _Stalled(
                 message: state.error,
                 onRetry: controller.retry,
-                onHome: () => context.go(AppRoutes.home),
+                onHome: goToBills,
               ),
             },
           ),
@@ -134,9 +149,10 @@ class _WorkingState extends State<_Working>
 }
 
 class _Done extends StatelessWidget {
-  const _Done({required this.onContinue});
+  const _Done({required this.onContinue, required this.onHome});
 
   final VoidCallback onContinue;
+  final VoidCallback onHome;
 
   @override
   Widget build(BuildContext context) {
@@ -154,13 +170,15 @@ class _Done extends StatelessWidget {
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: 28),
-        FilledButton(
+        FilledButton.icon(
           onPressed: onContinue,
+          icon: const Icon(Icons.receipt_long),
+          label: const Text('View bill'),
           style: FilledButton.styleFrom(
-            padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
+            padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
           ),
-          child: const Text('Done'),
         ),
+        TextButton(onPressed: onHome, child: const Text('Back to home')),
       ],
     );
   }

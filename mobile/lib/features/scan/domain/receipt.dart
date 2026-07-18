@@ -36,17 +36,60 @@ class ReceiptImage {
   final int pageNumber;
 }
 
-/// A receipt and its pages (task 1.3.5, decision 24).
+/// A parsed line item on a receipt (`GET /receipts/{id}/items`).
+class ReceiptItem {
+  const ReceiptItem({
+    required this.id,
+    required this.name,
+    required this.quantity,
+    required this.unitPrice,
+    required this.totalPrice,
+    this.brand,
+    this.category,
+    this.unit,
+    this.needsReview = false,
+  });
+
+  factory ReceiptItem.fromJson(Map<String, dynamic> json) => ReceiptItem(
+    id: json['id'] as String,
+    name: json['name'] as String? ?? '',
+    brand: json['brand'] as String?,
+    category: json['category'] as String?,
+    quantity: _toDouble(json['quantity']) ?? 1,
+    unit: json['unit'] as String?,
+    unitPrice: _toDouble(json['unit_price']) ?? 0,
+    totalPrice: _toDouble(json['total_price']) ?? 0,
+    needsReview: json['needs_review'] as bool? ?? false,
+  );
+
+  final String id;
+  final String name;
+  final String? brand;
+  final String? category;
+  final double quantity;
+  final String? unit;
+  final double unitPrice;
+  final double totalPrice;
+
+  /// True for a low-confidence parse the UI should highlight for correction.
+  final bool needsReview;
+}
+
+/// A receipt: its pages and, once OCR completes, its parsed summary (task 1.3.5,
+/// decision 24; Phase 3 bill viewer).
 ///
 /// A receipt holds 1..N pages — a long receipt is photographed in several shots and the
-/// pages are appended to the same bill. Parsed fields (store, date, totals, line items)
-/// don't exist until OCR completes in Phase 2, so this mirrors only what the upload and
-/// list endpoints return.
+/// pages are appended to the same bill. The parsed summary fields are null until the
+/// pipeline settles the receipt on `done`; line items are fetched separately.
 class Receipt {
   const Receipt({
     required this.id,
     required this.status,
     required this.createdAt,
+    this.storeName,
+    this.date,
+    this.total,
+    this.paymentMethod,
     this.images = const [],
   });
 
@@ -56,6 +99,10 @@ class Receipt {
     createdAt:
         DateTime.tryParse(json['created_at'] as String? ?? '') ??
         DateTime.now(),
+    storeName: json['store_name'] as String?,
+    date: DateTime.tryParse(json['date'] as String? ?? ''),
+    total: _toDouble(json['total']),
+    paymentMethod: json['payment_method'] as String?,
     images: ((json['images'] as List<dynamic>?) ?? const [])
         .map((i) => ReceiptImage.fromJson(i as Map<String, dynamic>))
         .toList(),
@@ -64,7 +111,23 @@ class Receipt {
   final String id;
   final ReceiptStatus status;
   final DateTime createdAt;
+
+  /// Parsed summary — null until OCR completes.
+  final String? storeName;
+  final DateTime? date;
+  final double? total;
+  final String? paymentMethod;
+
   final List<ReceiptImage> images;
 
   int get pageCount => images.length;
 }
+
+/// Parse a numeric field that the backend may serialise as either a JSON number or a
+/// string (pydantic renders Decimal as a string).
+double? _toDouble(Object? value) => switch (value) {
+  null => null,
+  final num n => n.toDouble(),
+  final String s => double.tryParse(s),
+  _ => null,
+};

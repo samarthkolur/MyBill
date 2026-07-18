@@ -7,6 +7,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:mybill/app.dart';
 import 'package:mybill/features/auth/data/auth_repository.dart';
+import 'package:mybill/features/bills/application/bills_providers.dart';
+import 'package:mybill/features/scan/domain/receipt.dart';
 
 /// Stands in for [AuthRepository] so these tests never touch the network or need
 /// `Supabase.initialize`. Implements the class's implicit interface — the real one
@@ -68,7 +70,12 @@ Future<void> _pumpApp(
 ) async {
   await tester.pumpWidget(
     ProviderScope(
-      overrides: [authRepositoryProvider.overrideWithValue(repository)],
+      overrides: [
+        authRepositoryProvider.overrideWithValue(repository),
+        // Home fetches the bills list; stub it so these auth/navigation tests never hit
+        // the network. An empty list renders the home empty-state.
+        receiptsListProvider.overrideWith((ref) async => <Receipt>[]),
+      ],
       child: const MyBillApp(),
     ),
   );
@@ -86,7 +93,7 @@ void main() {
 
     // The guard (task 1.2.8) sends an unauthenticated user to login, not home.
     expect(find.text('Welcome back'), findsOneWidget);
-    expect(find.text('Grocery Bill Intelligence'), findsNothing);
+    expect(find.text('Scan receipt'), findsNothing);
   });
 
   testWidgets('signed-in user lands on the home screen', (tester) async {
@@ -95,8 +102,7 @@ void main() {
 
     await _pumpApp(tester, repository);
 
-    expect(find.text('Grocery Bill Intelligence'), findsOneWidget);
-    expect(find.text('Signed in as shopper@example.com'), findsOneWidget);
+    expect(find.text('Scan receipt'), findsOneWidget);
   });
 
   testWidgets('signing in from the login screen navigates to home', (
@@ -119,7 +125,7 @@ void main() {
     await tester.pumpAndSettle();
 
     // No navigation happens in the screen — the guard reacts to the session change.
-    expect(find.text('Grocery Bill Intelligence'), findsOneWidget);
+    expect(find.text('Scan receipt'), findsOneWidget);
   });
 
   testWidgets('signing out returns the user to login (task 1.2.9)', (
@@ -129,7 +135,7 @@ void main() {
     addTearDown(repository.dispose);
 
     await _pumpApp(tester, repository);
-    expect(find.text('Grocery Bill Intelligence'), findsOneWidget);
+    expect(find.text('Scan receipt'), findsOneWidget);
 
     await tester.tap(find.byTooltip('Sign out'));
     await tester.pumpAndSettle();
@@ -153,6 +159,6 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Enter a valid email address'), findsOneWidget);
-    expect(find.text('Grocery Bill Intelligence'), findsNothing);
+    expect(find.text('Scan receipt'), findsNothing);
   });
 }

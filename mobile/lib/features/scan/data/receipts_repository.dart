@@ -52,6 +52,23 @@ class ReceiptsRepository {
     return Receipt.fromJson(data);
   }
 
+  /// The parsed line items of a receipt (bill detail).
+  Future<List<ReceiptItem>> items(String receiptId) async {
+    final response = await _dio.get<Map<String, dynamic>>(
+      '/receipts/$receiptId/items',
+    );
+    final data = response.data?['data'];
+    if (data is! List) {
+      throw const ApiException(
+        code: 'bad_response',
+        message: 'The server returned an unexpected response.',
+      );
+    }
+    return data
+        .map((i) => ReceiptItem.fromJson(i as Map<String, dynamic>))
+        .toList();
+  }
+
   /// The caller's receipts, newest first — the choices for "add to an existing bill".
   Future<List<Receipt>> list({int limit = 20}) async {
     final response = await _dio.get<Map<String, dynamic>>(
