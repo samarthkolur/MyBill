@@ -85,14 +85,20 @@ for now (mirroring `MyBill.md` §13) and will be broken into tasks as we approac
 
 ## Phase 2 — OCR Pipeline (milestone-level, not yet broken into tasks)
 
-- Choose + integrate OCR provider (Google Document AI recommended)
-- Image pre-processing service (resize, deskew, binarise)
-- Celery + Redis async job queue
-- `OCRProvider` interface + concrete implementation
-- `ReceiptParser` interface + first implementation
-- Category keyword mapping (seed 10 categories) + store alias table (seed 20 chains)
-- Normalisation layer → write to `receipts`, `receipt_items`, `price_history`
-- Processing status polling endpoint + Flutter animated processing screen
+- ✅ **DB write targets** — `categories` (seeded ×10) + `receipt_items` + `price_history`,
+  applied live (`…140000_ocr_tables`)
+- ✅ **`OCRProvider` interface + concrete implementation** — RapidOCR (PP-OCR via
+  onnxruntime), offline and free (decision on engine choice below)
+- ✅ **`ReceiptParser` interface + first implementation** — `HeuristicReceiptParser`:
+  geometry + regex, OCRResult → CanonicalReceipt (store, date/time, totals, line items),
+  preliminary category-by-keyword, low-confidence review flagging
+- ⬜ Image pre-processing service (resize, deskew, binarise)
+- ⬜ Celery + Redis async job queue
+- ⬜ Category keyword mapping already in the parser; **store alias table (seed 20 chains)**
+  still to add
+- ⬜ Normalisation layer → write CanonicalReceipt to `receipts`, `receipt_items`,
+  `price_history` (Stage 4: name normalisation, store-alias resolution, category-id lookup)
+- ⬜ Processing status polling endpoint + Flutter animated processing screen
 
 ## Phase 3 — Digital Bill Viewer (milestone-level)
 
