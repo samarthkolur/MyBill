@@ -131,6 +131,7 @@ class Receipt {
     this.tax,
     this.discount,
     this.paymentMethod,
+    this.itemCount,
     this.images = const [],
   });
 
@@ -148,6 +149,7 @@ class Receipt {
     tax: _toDouble(json['tax']),
     discount: _toDouble(json['discount']),
     paymentMethod: json['payment_method'] as String?,
+    itemCount: json['item_count'] as int?,
     images: ((json['images'] as List<dynamic>?) ?? const [])
         .map((i) => ReceiptImage.fromJson(i as Map<String, dynamic>))
         .toList(),
@@ -165,6 +167,9 @@ class Receipt {
   final double? tax;
   final double? discount;
   final String? paymentMethod;
+
+  /// Number of parsed line items (list view). Null until OCR completes.
+  final int? itemCount;
 
   final List<ReceiptImage> images;
 

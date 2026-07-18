@@ -156,13 +156,18 @@ class _FakeItemsRepo:
         self,
         items: dict[str, list[dict[str, Any]]] | None = None,
         search_rows: list[dict[str, Any]] | None = None,
+        counts: dict[str, int] | None = None,
     ) -> None:
         self.items = items or {}
         self.search_rows = search_rows or []
+        self.counts = counts or {}
         self.search_query: str | None = None
 
     async def list_for_receipt(self, *, receipt_id: Any) -> list[dict[str, Any]]:
         return self.items.get(str(receipt_id), [])
+
+    async def counts_by_receipt(self, *, user_id: Any) -> dict[str, int]:
+        return self.counts
 
     async def search(self, *, user_id: Any, query: str, limit: int = 50) -> list[dict[str, Any]]:
         self.search_query = query
@@ -503,6 +508,23 @@ async def test_blank_search_returns_nothing_without_querying() -> None:
     )
     assert result == []
     assert items.search_query is None  # never hit the repository
+
+
+async def test_list_receipts_includes_store_name_and_item_count() -> None:
+    rid, user = uuid4(), _user()
+    repo = _FakeRepo(rows={str(rid): _done_receipt_row(rid, user.id, store_id="store-1")})
+    service = _service(
+        _FakeBucket(),
+        repo,
+        stores=_FakeStoresRepo({"store-1": "DMart"}),
+        items=_FakeItemsRepo(counts={str(rid): 12}),
+    )
+
+    listed = await service.list_receipts(user=user)
+
+    assert len(listed) == 1
+    assert listed[0].store_name == "DMart"
+    assert listed[0].item_count == 12
 
 
 async def test_list_receipts_includes_pages() -> None:

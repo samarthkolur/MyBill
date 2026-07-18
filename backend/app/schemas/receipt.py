@@ -93,6 +93,8 @@ class Receipt(BaseModel):
     discount: Decimal | None = None
     payment_method: str | None = None
     ocr_confidence: float | None = None
+    # Number of parsed line items, for the list view. None when not populated.
+    item_count: int | None = None
     # Ordered by page number. A receipt created via upload always has at least one.
     images: list[ReceiptImage] = []
 

@@ -49,6 +49,25 @@ class ReceiptItemRepository:
         )
         return cast("list[dict[str, Any]]", resp.data or [])
 
+    async def counts_by_receipt(self, *, user_id: UUID) -> dict[str, int]:
+        """Map ``receipt_id`` → number of line items, for the bills list.
+
+        One query for the user's items, counted in memory — cheaper than a per-receipt
+        count query for a personal-scale dataset.
+        """
+
+        resp = (
+            await self._client.table(_ITEMS_TABLE)
+            .select("receipt_id")
+            .eq("user_id", str(user_id))
+            .execute()
+        )
+        counts: dict[str, int] = {}
+        for row in cast("list[dict[str, Any]]", resp.data or []):
+            key = str(row["receipt_id"])
+            counts[key] = counts.get(key, 0) + 1
+        return counts
+
     async def search(self, *, user_id: UUID, query: str, limit: int = 50) -> list[dict[str, Any]]:
         """A user's line items whose name matches ``query`` (case-insensitive substring).
 

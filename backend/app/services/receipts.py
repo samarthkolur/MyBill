@@ -280,13 +280,28 @@ class ReceiptService:
     async def list_receipts(
         self, *, user: AuthenticatedUser, limit: int = 20, offset: int = 0
     ) -> list[Receipt]:
-        """A user's receipts, newest first, each with its pages."""
+        """A user's receipts, newest first, each with its store name and item count.
+
+        Store names and item counts are resolved in one batch query each (not per row), so
+        the list can group by store and show a per-bill summary without an N+1.
+        """
 
         rows = await self._repository.list_for_user(user_id=user.id, limit=limit, offset=offset)
+        store_names = await self._stores.id_to_name(user.id) if self._stores else {}
+        item_counts = await self._items.counts_by_receipt(user_id=user.id) if self._items else {}
+
         receipts: list[Receipt] = []
         for row in rows:
             images = await self._images.list_for_receipt(receipt_id=UUID(row["id"]))
-            receipts.append(Receipt(**row, images=[ReceiptImage.model_validate(i) for i in images]))
+            store_id = row.get("store_id")
+            receipts.append(
+                Receipt(
+                    **row,
+                    store_name=store_names.get(str(store_id)) if store_id else None,
+                    item_count=item_counts.get(str(row["id"]), 0),
+                    images=[ReceiptImage.model_validate(i) for i in images],
+                )
+            )
         return receipts
 
     async def _store_page(

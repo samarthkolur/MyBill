@@ -9,8 +9,8 @@ import 'package:mybill/features/bills/application/bills_providers.dart';
 import 'package:mybill/features/bills/presentation/bill_format.dart';
 import 'package:mybill/features/scan/domain/receipt.dart';
 
-/// Home: the caller's bills, newest first (MyBill.md §7). The list backs the main flow —
-/// tap a bill to see its parsed items, or scan a new one.
+/// Home: the caller's bills grouped by store (MyBill.md §7). Tap a bill for its parsed
+/// items, search across items, or scan a new receipt.
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
 
@@ -57,12 +57,7 @@ class HomeScreen extends ConsumerWidget {
           onRefresh: () async => ref.invalidate(receiptsListProvider),
           child: receipts.isEmpty
               ? const _EmptyList()
-              : ListView.separated(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  itemCount: receipts.length,
-                  separatorBuilder: (_, _) => const Divider(height: 1),
-                  itemBuilder: (context, i) => _BillTile(receipt: receipts[i]),
-                ),
+              : _GroupedBills(receipts: receipts),
         ),
       ),
       floatingActionButton: FloatingActionButton.extended(
@@ -74,6 +69,77 @@ class HomeScreen extends ConsumerWidget {
   }
 }
 
+/// Bills grouped under a header per store, stores ordered by their most recent bill.
+class _GroupedBills extends StatelessWidget {
+  const _GroupedBills({required this.receipts});
+
+  final List<Receipt> receipts;
+
+  @override
+  Widget build(BuildContext context) {
+    // Receipts arrive newest-first; preserve that within each group.
+    final groups = <String, List<Receipt>>{};
+    for (final receipt in receipts) {
+      // A receipt with no store yet (still processing, or store unread) collects under a
+      // neutral heading rather than a misleading store name.
+      final key = receipt.storeName ?? 'Not yet sorted';
+      groups.putIfAbsent(key, () => []).add(receipt);
+    }
+    final sections = groups.entries.toList()
+      ..sort(
+        (a, b) => b.value.first.createdAt.compareTo(a.value.first.createdAt),
+      );
+
+    return ListView(
+      padding: const EdgeInsets.only(bottom: 88),
+      children: [
+        for (final section in sections) ...[
+          _StoreHeader(store: section.key, bills: section.value),
+          for (final receipt in section.value) _BillTile(receipt: receipt),
+        ],
+      ],
+    );
+  }
+}
+
+class _StoreHeader extends StatelessWidget {
+  const _StoreHeader({required this.store, required this.bills});
+
+  final String store;
+  final List<Receipt> bills;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final spent = bills.fold<double>(0, (sum, b) => sum + (b.total ?? 0));
+    final count = bills.length == 1 ? '1 bill' : '${bills.length} bills';
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 20, 16, 6),
+      child: Row(
+        children: [
+          Icon(Icons.storefront, size: 18, color: theme.colorScheme.primary),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              store.toUpperCase(),
+              style: theme.textTheme.titleSmall,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          Text(
+            spent > 0 ? '$count · ${formatMoney(spent)}' : count,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.outline,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// One bill within a store section: its date, item count, and total (or a status hint).
 class _BillTile extends StatelessWidget {
   const _BillTile({required this.receipt});
 
@@ -82,9 +148,14 @@ class _BillTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final subtitle = receipt.date != null
-        ? formatDate(receipt.date)
-        : 'Uploaded ${formatDate(receipt.createdAt)}';
+    final date = receipt.date ?? receipt.createdAt;
+    final count = receipt.itemCount ?? 0;
+    final subtitle = switch (receipt.status) {
+      ReceiptStatus.done =>
+        count > 0 ? '$count item${count == 1 ? '' : 's'}' : 'No items found',
+      ReceiptStatus.failed => "Couldn't read this receipt",
+      _ => 'Processing…',
+    };
 
     return ListTile(
       leading: CircleAvatar(
@@ -94,7 +165,7 @@ class _BillTile extends StatelessWidget {
           color: theme.colorScheme.onPrimaryContainer,
         ),
       ),
-      title: Text(receipt.storeName ?? 'Receipt'),
+      title: Text(formatDate(date)),
       subtitle: Text(subtitle),
       trailing: _Trailing(receipt: receipt),
       onTap: () => context.push(AppRoutes.billFor(receipt.id)),
@@ -102,7 +173,6 @@ class _BillTile extends StatelessWidget {
   }
 }
 
-/// The total once parsed, or a status chip while the receipt is still in the pipeline.
 class _Trailing extends StatelessWidget {
   const _Trailing({required this.receipt});
 
