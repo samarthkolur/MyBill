@@ -69,6 +69,28 @@ async def add_receipt_image(
 
 
 @router.get(
+    "/{receipt_id}",
+    response_model=ApiResponse[Receipt],
+    summary="Get a receipt (processing status + pages)",
+)
+async def get_receipt(
+    receipt_id: UUID,
+    user: CurrentUserDep,
+    receipts: ReceiptServiceDep,
+) -> ApiResponse[Receipt]:
+    """Fetch one receipt the caller owns, with its current ``status`` and pages.
+
+    Backs the client's post-upload polling: after a receipt is uploaded it sits at
+    ``pending``/``processing`` until the OCR pipeline settles it on ``done`` or ``failed``.
+
+    Errors (standard envelope): 401 (no/invalid token), 404 (no such receipt for this user).
+    """
+
+    receipt = await receipts.get_receipt(user=user, receipt_id=receipt_id)
+    return success(receipt)
+
+
+@router.get(
     "",
     response_model=ApiResponse[list[Receipt]],
     summary="List the caller's receipts",

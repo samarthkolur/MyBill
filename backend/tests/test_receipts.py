@@ -304,6 +304,33 @@ async def test_add_image_enforces_the_page_cap() -> None:
         )
 
 
+async def test_get_receipt_returns_it_with_pages() -> None:
+    bucket, repo, images, user = _FakeBucket(), _FakeRepo(), _FakeImages(), _user()
+    service = _service(bucket, repo, images)
+    created = await service.upload_receipt(user=user, data=b"p1", content_type="image/jpeg")
+
+    fetched = await service.get_receipt(user=user, receipt_id=created.id)
+
+    assert fetched.id == created.id
+    assert fetched.status is ReceiptStatus.PENDING
+    assert fetched.page_count == 1
+
+
+async def test_get_unknown_receipt_is_404() -> None:
+    with pytest.raises(NotFoundError):
+        await _service(_FakeBucket(), _FakeRepo()).get_receipt(user=_user(), receipt_id=uuid4())
+
+
+async def test_get_another_users_receipt_is_404() -> None:
+    bucket, repo, images = _FakeBucket(), _FakeRepo(), _FakeImages()
+    service = _service(bucket, repo, images)
+    owner = await service.upload_receipt(user=_user(), data=b"mine", content_type="image/jpeg")
+
+    # Reads as absent, not forbidden — an id is never confirmed to a non-owner.
+    with pytest.raises(NotFoundError):
+        await service.get_receipt(user=_user(), receipt_id=owner.id)
+
+
 async def test_list_receipts_includes_pages() -> None:
     bucket, repo, images, user = _FakeBucket(), _FakeRepo(), _FakeImages(), _user()
     service = _service(bucket, repo, images)
@@ -324,5 +351,11 @@ def test_upload_requires_auth_when_configured(auth_client: TestClient) -> None:
         "/v1/receipts/upload",
         files={"file": ("r.jpg", b"\xff\xd8\xffjpeg", "image/jpeg")},
     )
+    assert resp.status_code == 401
+    assert resp.json()["error"]["code"] == "unauthorized"
+
+
+def test_get_receipt_requires_auth_when_configured(auth_client: TestClient) -> None:
+    resp = auth_client.get(f"/v1/receipts/{uuid4()}")
     assert resp.status_code == 401
     assert resp.json()["error"]["code"] == "unauthorized"

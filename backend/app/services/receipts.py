@@ -149,6 +149,24 @@ class ReceiptService:
         images = [ReceiptImage.model_validate(i) for i in existing] + [image]
         return Receipt(**row, images=images)
 
+    async def get_receipt(self, *, user: AuthenticatedUser, receipt_id: UUID) -> Receipt:
+        """Fetch one of the caller's receipts with its pages — the processing-status poll.
+
+        The client polls this after an upload, reading ``status`` until it settles on
+        ``done`` or ``failed``. Parsed fields (store, totals, items) ride along on the row
+        once OCR fills them; the bill-detail read model surfaces them in Phase 3.
+
+        Raises:
+            NotFoundError: no such receipt for this user (404) — also the answer for a
+                receipt owned by someone else, so an id is never confirmed to a non-owner.
+        """
+
+        row = await self._repository.get_owned(receipt_id=receipt_id, user_id=user.id)
+        if row is None:
+            raise NotFoundError("Receipt not found.")
+        images = await self._images.list_for_receipt(receipt_id=receipt_id)
+        return Receipt(**row, images=[ReceiptImage.model_validate(i) for i in images])
+
     async def list_receipts(
         self, *, user: AuthenticatedUser, limit: int = 20, offset: int = 0
     ) -> list[Receipt]:
