@@ -220,6 +220,36 @@ async def test_totals_are_read_and_kept_out_of_items() -> None:
     assert receipt.totals.tax == Decimal("3.30")
 
 
+async def test_net_amount_is_the_total_over_grand_total() -> None:
+    # "Grand Total" is pre-tax; "Net Amount" is what's payable. The payable figure wins.
+    receipt = await _parse(
+        _line("DEATH BY CHOCOLATE", x=20, row=0),
+        _line("180.00", x=320, row=0),
+        _line("Grand Total", x=20, row=1),
+        _line("340.00", x=320, row=1),
+        _line("SGST 9.0 %", x=20, row=2),
+        _line("30.60", x=320, row=2),
+        _line("CGST 9.0 %", x=20, row=3),
+        _line("30.60", x=320, row=3),
+        _line("Net Amount", x=20, row=4),
+        _line("401.00", x=320, row=4),
+    )
+
+    assert receipt.totals.total == Decimal("401.00")  # payable, not the 340 grand total
+    assert receipt.totals.tax == Decimal("61.20")  # SGST + CGST amounts, not the 9.0% rate
+
+
+async def test_tax_rate_percentage_is_not_read_as_a_tax_amount() -> None:
+    # A rate-only line ("CGST @ 2.50%") with no amount column must not set a 2.50 tax.
+    receipt = await _parse(
+        _line("AMUL MILK", x=20, row=0),
+        _line("66.00", x=320, row=0),
+        _line("CGST @ 2.50%, SGST @ 2.50%", x=20, row=1),
+    )
+
+    assert receipt.totals.tax is None
+
+
 async def test_repeated_total_takes_the_last() -> None:
     receipt = await _parse(
         _line("TOTAL", x=20, row=0),

@@ -111,7 +111,10 @@ class _StoreHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final spent = bills.fold<double>(0, (sum, b) => sum + (b.total ?? 0));
+    final spent = bills.fold<double>(
+      0,
+      (sum, b) => sum + (b.displayTotal ?? 0),
+    );
     final count = bills.length == 1 ? '1 bill' : '${bills.length} bills';
 
     return Padding(
@@ -183,8 +186,10 @@ class _Trailing extends StatelessWidget {
     final theme = Theme.of(context);
     switch (receipt.status) {
       case ReceiptStatus.done:
+        // A leading "~" marks an estimate (no printed total was read from the photo).
+        final prefix = receipt.isTotalEstimated ? '~' : '';
         return Text(
-          formatMoney(receipt.total),
+          '$prefix${formatMoney(receipt.displayTotal)}',
           style: theme.textTheme.titleMedium?.copyWith(
             color: theme.colorScheme.primary,
           ),

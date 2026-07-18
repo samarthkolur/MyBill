@@ -132,6 +132,7 @@ class Receipt {
     this.discount,
     this.paymentMethod,
     this.itemCount,
+    this.itemTotal,
     this.images = const [],
   });
 
@@ -150,6 +151,7 @@ class Receipt {
     discount: _toDouble(json['discount']),
     paymentMethod: json['payment_method'] as String?,
     itemCount: json['item_count'] as int?,
+    itemTotal: _toDouble(json['item_total']),
     images: ((json['images'] as List<dynamic>?) ?? const [])
         .map((i) => ReceiptImage.fromJson(i as Map<String, dynamic>))
         .toList(),
@@ -171,9 +173,18 @@ class Receipt {
   /// Number of parsed line items (list view). Null until OCR completes.
   final int? itemCount;
 
+  /// Sum of the line items — the estimate used when [total] (the printed amount) is null.
+  final double? itemTotal;
+
   final List<ReceiptImage> images;
 
   int get pageCount => images.length;
+
+  /// The best amount to show: the printed total, else the item-sum estimate.
+  double? get displayTotal => total ?? itemTotal;
+
+  /// True when [displayTotal] is an estimate (no printed total was read).
+  bool get isTotalEstimated => total == null && itemTotal != null;
 }
 
 /// Parse a numeric field that the backend may serialise as either a JSON number or a

@@ -207,8 +207,9 @@ class _Totals extends StatelessWidget {
     final itemsSum = items.fold<double>(0, (sum, i) => sum + i.totalPrice);
     final tax = receipt.tax ?? 0;
     final discount = receipt.discount ?? 0;
-    // The printed total when OCR found one, else a computed one that actually adds up
-    // (line sum + tax − discount) so the receipt reconciles.
+    // Prefer the printed total; otherwise estimate one that adds up (line sum + tax −
+    // discount) and flag it as an estimate.
+    final estimated = receipt.total == null;
     final total = receipt.total ?? (itemsSum + tax - discount);
 
     return Column(
@@ -220,10 +221,21 @@ class _Totals extends StatelessWidget {
           _TotalRow(label: 'Discount', value: receipt.discount),
         const SizedBox(height: 4),
         _TotalRow(
-          label: 'TOTAL',
+          label: estimated ? 'TOTAL (est.)' : 'TOTAL',
           value: total,
           style: theme.textTheme.titleMedium,
         ),
+        if (estimated) ...[
+          const SizedBox(height: 6),
+          Text(
+            "The printed total wasn't in the photo — this is the sum of the items. "
+            'Retake including the bottom of the receipt for the exact amount.',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.outline,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
       ],
     );
   }

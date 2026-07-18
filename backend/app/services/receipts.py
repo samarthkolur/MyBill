@@ -10,7 +10,6 @@ URLs are generated on read (Phase 3). OCR (Phase 2) fills the rest.
 
 from __future__ import annotations
 
-from typing import Any
 from uuid import UUID, uuid4
 
 from supabase import AsyncClient
@@ -296,14 +295,14 @@ class ReceiptService:
             images = await self._images.list_for_receipt(receipt_id=UUID(row["id"]))
             store_id = row.get("store_id")
             count, items_total = summaries.get(str(row["id"]), (0, None))
-            # Show the printed total, falling back to the summed line items when OCR found
-            # none — so a bill still shows an amount in the list.
-            fields: dict[str, Any] = {**row, "total": row.get("total") or items_total}
             receipts.append(
                 Receipt(
-                    **fields,
+                    **row,
                     store_name=store_names.get(str(store_id)) if store_id else None,
                     item_count=count,
+                    # The printed ``total`` stays honest (may be null); ``item_total`` is the
+                    # line sum the client falls back to, labelled as an estimate.
+                    item_total=items_total,
                     images=[ReceiptImage.model_validate(i) for i in images],
                 )
             )

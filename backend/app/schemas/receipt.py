@@ -95,6 +95,10 @@ class Receipt(BaseModel):
     ocr_confidence: float | None = None
     # Number of parsed line items, for the list view. None when not populated.
     item_count: int | None = None
+    # Sum of the line items — an estimate of the bill when OCR found no printed total
+    # (e.g. the total was cut off in the photo). Distinct from ``total`` (the printed
+    # amount) so the client can label an estimate as such.
+    item_total: Decimal | None = None
     # Ordered by page number. A receipt created via upload always has at least one.
     images: list[ReceiptImage] = []
 

@@ -550,32 +550,47 @@ def _categorise(name_normalised: str) -> str | None:
 # ---------------------------------------------------------------------------
 # Totals
 # ---------------------------------------------------------------------------
+# Labels for the amount actually payable, in priority order. "Net amount" / "amount
+# payable" is the post-tax figure and beats "grand total", which on many receipts is the
+# pre-tax subtotal.
+_NET_KEYWORDS = ("net amount", "net amt", "net payable", "amount payable", "net total", "payable")
+
+
 def _extract_totals(rows: list[list[OCRLine]]) -> CanonicalTotals:
     """Pull the money summary from the keyword-bearing rows.
 
-    ``total`` is taken from a row that says "total" but not "subtotal" — the printed grand
-    total, not the pre-tax subtotal. When several rows qualify (a receipt often repeats
-    "TOTAL" for the card slip) the last one wins, since the final figure sits lowest.
+    The printed ``total`` is the amount *payable*: a "net amount"/"payable" line wins over a
+    "grand total" (often pre-tax), which in turn wins over a bare "total". Percentage rates
+    ("CGST @ 2.50%") are never read as amounts, so a tax-rate line isn't mistaken for a tax
+    amount.
     """
 
     totals = CanonicalTotals()
+    net = grand = plain_total = None
     for row in rows:
         text = _row_text(row)
         lowered = text.lower()
-        money = _money_values(text)
+        # Drop rate percentages before reading money, so "2.50%"/"9.0 %" aren't amounts.
+        money = _money_values(re.sub(r"\d+(?:\.\d+)?\s*%", "", text))
         if not money:
             continue
         amount = _quantize_money(money[-1])
 
         if "subtotal" in lowered or "sub total" in lowered:
             totals.subtotal = amount
+        elif any(k in lowered for k in _NET_KEYWORDS):
+            net = amount
+        elif "grand total" in lowered:
+            grand = amount
         elif "total" in lowered:
-            totals.total = amount
+            plain_total = amount
         elif any(k in lowered for k in ("tax", "gst", "cgst", "sgst", "igst", "vat")):
             # Sum tax lines — CGST + SGST are printed separately but are one tax figure.
             totals.tax = _quantize_money((totals.tax or Decimal(0)) + amount)
         elif "discount" in lowered or "savings" in lowered:
             totals.discount = amount
+
+    totals.total = net or grand or plain_total
     return totals
 
 
