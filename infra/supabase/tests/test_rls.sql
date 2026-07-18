@@ -199,6 +199,139 @@ begin;
   end $$;
 rollback;
 
+-- ===========================================================================
+-- Test 8 — categories: global reference data, readable by all, writable by none
+-- ===========================================================================
+begin;
+  set local role authenticated;
+  set local request.jwt.claim.sub = '11111111-1111-1111-1111-111111111111';
+  do $$
+  begin
+    -- Readable: the migration seeds 10 categories, visible to every authenticated user
+    -- (no user_id, no owner policy — it is shared reference data).
+    assert (select count(*) from public.categories) = 10,
+      'Test 8 FAILED: the 10 seeded categories are not all readable';
+
+    -- Writable by none: authenticated has SELECT only, so a write is a privilege error,
+    -- not an RLS row miss.
+    begin
+      insert into public.categories (name) values ('Contraband');
+      raise exception 'Test 8 FAILED: authenticated user was allowed to insert a category';
+    exception when insufficient_privilege then
+      null;  -- expected
+    end;
+
+    raise notice 'Test 8 PASSED: categories are readable by all, writable by none';
+  end $$;
+rollback;
+
+-- ===========================================================================
+-- Test 9 — receipt_items: owner RLS + price/quantity checks + cascade on delete
+-- ===========================================================================
+begin;
+  set local role authenticated;
+  set local request.jwt.claim.sub = '11111111-1111-1111-1111-111111111111';
+  do $$
+  declare
+    v_receipt_id uuid;
+  begin
+    insert into public.receipts (user_id)
+      values ('11111111-1111-1111-1111-111111111111')
+      returning id into v_receipt_id;
+
+    -- Allowed: a line item on the caller's own receipt. A 0.00 total is legitimate
+    -- (free/promotional lines), so it must be accepted.
+    insert into public.receipt_items
+      (receipt_id, user_id, name, name_normalised, quantity, unit_price, total_price)
+      values (v_receipt_id, '11111111-1111-1111-1111-111111111111',
+              'AMUL MILK 1L', 'amul milk 1l', 1, 66.00, 66.00);
+    insert into public.receipt_items
+      (receipt_id, user_id, name, name_normalised, quantity, unit_price, total_price)
+      values (v_receipt_id, '11111111-1111-1111-1111-111111111111',
+              'FREE SAMPLE', 'free sample', 1, 0.00, 0.00);
+
+    -- Blocked: attributing an item to another user.
+    begin
+      insert into public.receipt_items
+        (receipt_id, user_id, name, name_normalised, quantity, unit_price, total_price)
+        values (v_receipt_id, '22222222-2222-2222-2222-222222222222',
+                'STOLEN', 'stolen', 1, 1.00, 1.00);
+      raise exception 'Test 9 FAILED: inserting a receipt item for another user was allowed';
+    exception when insufficient_privilege then
+      null;  -- expected
+    end;
+
+    -- Blocked: a negative price is a parse failure, not a purchase.
+    begin
+      insert into public.receipt_items
+        (receipt_id, user_id, name, name_normalised, quantity, unit_price, total_price)
+        values (v_receipt_id, '11111111-1111-1111-1111-111111111111',
+                'GLITCH', 'glitch', 1, -1.00, -1.00);
+      raise exception 'Test 9 FAILED: a negative price was allowed';
+    exception when check_violation then
+      null;  -- expected
+    end;
+
+    -- Blocked: a non-positive quantity.
+    begin
+      insert into public.receipt_items
+        (receipt_id, user_id, name, name_normalised, quantity, unit_price, total_price)
+        values (v_receipt_id, '11111111-1111-1111-1111-111111111111',
+                'ZERO QTY', 'zero qty', 0, 1.00, 0.00);
+      raise exception 'Test 9 FAILED: a zero quantity was allowed';
+    exception when check_violation then
+      null;  -- expected
+    end;
+
+    assert (select count(*) from public.receipt_items) = 2,
+      'Test 9 FAILED: caller sees receipt items other than their own';
+
+    -- Deleting the receipt cascades to its items, so no orphan rows survive.
+    delete from public.receipts where id = v_receipt_id;
+    assert (select count(*) from public.receipt_items where receipt_id = v_receipt_id) = 0,
+      'Test 9 FAILED: receipt items were not cascaded on receipt delete';
+
+    raise notice 'Test 9 PASSED: receipt_items RLS + price/quantity checks + cascade';
+  end $$;
+rollback;
+
+-- ===========================================================================
+-- Test 10 — price_history: owner RLS + non-negative price check
+-- ===========================================================================
+begin;
+  set local role authenticated;
+  set local request.jwt.claim.sub = '11111111-1111-1111-1111-111111111111';
+  do $$
+  begin
+    -- Allowed: a price observation owned by the caller.
+    insert into public.price_history (user_id, name_normalised, unit_price, date)
+      values ('11111111-1111-1111-1111-111111111111', 'amul milk 1l', 66.00, current_date);
+
+    -- Blocked: a price observation attributed to another user.
+    begin
+      insert into public.price_history (user_id, name_normalised, unit_price, date)
+        values ('22222222-2222-2222-2222-222222222222', 'amul milk 1l', 66.00, current_date);
+      raise exception 'Test 10 FAILED: inserting price history for another user was allowed';
+    exception when insufficient_privilege then
+      null;  -- expected
+    end;
+
+    -- Blocked: a negative price.
+    begin
+      insert into public.price_history (user_id, name_normalised, unit_price, date)
+        values ('11111111-1111-1111-1111-111111111111', 'glitch', -1.00, current_date);
+      raise exception 'Test 10 FAILED: a negative price was allowed';
+    exception when check_violation then
+      null;  -- expected
+    end;
+
+    assert (select count(*) from public.price_history) = 1,
+      'Test 10 FAILED: caller sees price history other than their own';
+
+    raise notice 'Test 10 PASSED: price_history RLS + non-negative price check';
+  end $$;
+rollback;
+
 \echo '---------------------------------------------'
 \echo 'All RLS / auth-sync assertions passed.'
 \echo '---------------------------------------------'
