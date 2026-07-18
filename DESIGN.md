@@ -604,18 +604,18 @@ All responses use the standard envelope from `MyBill.md` §5 via `app.core.respo
 
 Migrations live in `infra/supabase/migrations/`, verified against Postgres 16.
 
-| Table / object                                        | Status                    | Migration                     |
-| ----------------------------------------------------- | ------------------------- | ----------------------------- |
-| `public.users` (+ RLS, grants, `updated_at` trigger)  | ✅ Created                | `…090100_create_users`        |
-| `handle_new_user()` auth-sync trigger                 | ✅ Created                | `…090200_auth_user_sync`      |
-| `receipts` Storage bucket (private) + policies        | ✅ Created                | `…090300_receipts_storage`    |
-| `stores` (+ RLS, grants, `updated_at`)                | ✅ Created                | `…093000_stores_and_receipts` |
-| `receipts` (+ RLS, grants, indexes, status CHECK)     | ✅ Created                | `…093000_stores_and_receipts` |
-| `receipt_images` (+ RLS, grants, indexes, page CHECK) | ✅ Created (applied live) | `…120000_receipt_images`      |
-| `receipt_items`                                       | ⬜ Pending                | Phase 2                       |
-| `categories`                                          | ⬜ Pending                | Phase 2                       |
-| `price_history`                                       | ⬜ Pending                | Phase 2                       |
-| `analytics_cache`                                     | ⬜ Pending                | Phase 4                       |
+| Table / object                                            | Status                                      | Migration                     |
+| --------------------------------------------------------- | ------------------------------------------- | ----------------------------- |
+| `public.users` (+ RLS, grants, `updated_at` trigger)      | ✅ Created                                  | `…090100_create_users`        |
+| `handle_new_user()` auth-sync trigger                     | ✅ Created                                  | `…090200_auth_user_sync`      |
+| `receipts` Storage bucket (private) + policies            | ✅ Created                                  | `…090300_receipts_storage`    |
+| `stores` (+ RLS, grants, `updated_at`)                    | ✅ Created                                  | `…093000_stores_and_receipts` |
+| `receipts` (+ RLS, grants, indexes, status CHECK)         | ✅ Created                                  | `…093000_stores_and_receipts` |
+| `receipt_images` (+ RLS, grants, indexes, page CHECK)     | ✅ Created (applied live)                   | `…120000_receipt_images`      |
+| `receipt_items` (+ RLS, grants, indexes, price/qty CHECK) | ✅ Created (harness-verified, not yet live) | `…140000_ocr_tables`          |
+| `categories` (global reference data, seeded ×10)          | ✅ Created (harness-verified, not yet live) | `…140000_ocr_tables`          |
+| `price_history` (+ RLS, grants, indexes, price CHECK)     | ✅ Created (harness-verified, not yet live) | `…140000_ocr_tables`          |
+| `analytics_cache`                                         | ⬜ Pending                                  | Phase 4                       |
 
 Full target schema is `MyBill.md` §4. Migrations through `…093000_stores_and_receipts` were
 **applied and verified on the live Supabase project** (ref `fkowzsdvwqbhrjykjrcb`, region
@@ -627,6 +627,13 @@ DB left clean (0 rows). Note `receipts.date`/`total` are nullable (decision 18).
 table present, `receipts.image_url` now nullable, RLS enabled + forced, the owner policy,
 the `(receipt_id, page_number)` unique key, and the `page_number > 0` CHECK all confirmed.
 The backfill was a no-op (0 existing receipts), so no data was touched.
+
+`…140000_ocr_tables` (categories + receipt_items + price_history, the OCR pipeline's write
+targets) was written and **verified against the throwaway Postgres harness on 2026-07-18** —
+migrations apply cleanly and new assertions (Tests 8–10) confirm categories is
+readable-by-all/writable-by-none, and that receipt_items/price_history are owner-scoped with
+their price/quantity CHECKs and cascade-on-receipt-delete. **Not yet applied to the live
+project** — that's the next step before the parser writes to these tables.
 
 ---
 
