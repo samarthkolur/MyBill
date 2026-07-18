@@ -73,9 +73,26 @@ class Settings(BaseSettings):
     # Expected token audience. Supabase issues `aud: "authenticated"` for logged-in users.
     supabase_jwt_audience: str = "authenticated"
 
+    # ---- Redis / Celery (Phase 2 OCR pipeline) ----
+    # Redis is both the Celery broker and its result backend. Compose points this at the
+    # compose-managed `redis` service; locally it defaults to a Redis on localhost.
+    redis_url: str = "redis://localhost:6379/0"
+
     @property
     def is_production(self) -> bool:
         return self.environment == Environment.PRODUCTION
+
+    @property
+    def celery_broker_url(self) -> str:
+        """Broker the API enqueues to and the worker consumes from."""
+
+        return self.redis_url
+
+    @property
+    def celery_result_backend(self) -> str:
+        """Where task results/states are stored (same Redis)."""
+
+        return self.redis_url
 
     @property
     def supabase_configured(self) -> bool:

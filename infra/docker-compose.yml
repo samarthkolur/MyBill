@@ -2,11 +2,11 @@
 #
 # Run from this directory:  docker compose up --build
 #   - api    → FastAPI, hot-reloading, on http://localhost:8000  (GET /v1/health)
-#   - redis  → broker + cache, ready for the Celery pipeline landing in Phase 2
+#   - redis  → Celery broker + result backend
+#   - worker → Celery worker running the OCR pipeline (app.worker)
 #
-# The `worker` (Celery) service is defined but commented out until the Celery app exists
-# (Phase 2) — see the note at the bottom. Adding a service that can't start yet would be
-# placeholder scaffolding, so it stays disabled until it does real work.
+# The image (see backend/Dockerfile) installs the `ocr` dependency group, so the same build
+# serves both the api and the worker; only the command differs.
 
 name: mybill
 
@@ -56,20 +56,20 @@ services:
     restart: unless-stopped
 
   # ---------------------------------------------------------------------------
-  # Celery worker — ENABLED IN PHASE 2, once app/worker.py (the Celery app) exists.
-  # Kept here as the documented target shape (MyBill.md §12) so wiring it up later is a
-  # matter of uncommenting + adding the OCR tasks, not redesigning the compose file.
+  # Celery worker — consumes the OCR pipeline queue (app.worker). Same image as `api`;
+  # only the command differs. Needs the Supabase credentials (env_file) to read page
+  # images from Storage and write parsed rows back.
   # ---------------------------------------------------------------------------
-  # worker:
-  #   build:
-  #     context: ../backend
-  #     dockerfile: Dockerfile
-  #   env_file:
-  #     - ../backend/.env
-  #   environment:
-  #     REDIS_URL: redis://redis:6379/0
-  #   command: ["celery", "-A", "app.worker", "worker", "--loglevel=info"]
-  #   depends_on:
-  #     redis:
-  #       condition: service_healthy
-  #   restart: unless-stopped
+  worker:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    env_file:
+      - ../backend/.env
+    environment:
+      REDIS_URL: redis://redis:6379/0
+    command: ["celery", "-A", "app.worker", "worker", "--loglevel=info"]
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped

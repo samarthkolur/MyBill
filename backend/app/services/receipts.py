@@ -21,6 +21,7 @@ from app.core.exceptions import (
 )
 from app.core.logging import get_logger
 from app.core.security import AuthenticatedUser
+from app.integrations.tasks import TaskQueue
 from app.repositories.receipts import ReceiptImageRepository, ReceiptRepository
 from app.schemas.receipt import Receipt, ReceiptImage
 
@@ -52,10 +53,14 @@ class ReceiptService:
         client: AsyncClient,
         repository: ReceiptRepository,
         images: ReceiptImageRepository,
+        queue: TaskQueue | None = None,
     ):
         self._client = client
         self._repository = repository
         self._images = images
+        # Optional so the service stays usable without a broker (unit tests, or a deployment
+        # that runs OCR out of band). When set, a new upload kicks off background processing.
+        self._queue = queue
 
     async def upload_receipt(
         self, *, user: AuthenticatedUser, data: bytes, content_type: str | None
@@ -91,6 +96,12 @@ class ReceiptService:
             "receipt_uploaded",
             extra={"receipt_id": str(receipt_id), "user_id": str(user.id)},
         )
+        # Hand the finished upload to the OCR pipeline. Enqueued only after the row and its
+        # first page are safely stored, so the worker always finds a page to read. Only the
+        # first page triggers processing; appended pages ride the same eventual run.
+        if self._queue is not None:
+            self._queue.enqueue_receipt_processing(receipt_id=receipt_id, user_id=user.id)
+
         return Receipt(**row, images=[image])
 
     async def add_image(

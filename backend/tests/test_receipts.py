@@ -138,14 +138,27 @@ class _FakeImages:
         self.images = [i for i in self.images if i["receipt_id"] != str(receipt_id)]
 
 
+class _FakeQueue:
+    """Stands in for the Celery task queue."""
+
+    def __init__(self) -> None:
+        self.enqueued: list[tuple[Any, Any]] = []
+
+    def enqueue_receipt_processing(self, *, receipt_id: Any, user_id: Any) -> None:
+        self.enqueued.append((receipt_id, user_id))
+
+
 def _user() -> AuthenticatedUser:
     return AuthenticatedUser(id=uuid4(), email="u@example.com", role="authenticated", claims={})
 
 
 def _service(
-    bucket: _FakeBucket, repo: _FakeRepo, images: _FakeImages | None = None
+    bucket: _FakeBucket,
+    repo: _FakeRepo,
+    images: _FakeImages | None = None,
+    queue: _FakeQueue | None = None,
 ) -> ReceiptService:
-    return ReceiptService(_FakeClient(bucket), repo, images or _FakeImages())  # type: ignore[arg-type]
+    return ReceiptService(_FakeClient(bucket), repo, images or _FakeImages(), queue)  # type: ignore[arg-type]
 
 
 # ---- Validation ----
@@ -193,6 +206,35 @@ async def test_upload_stores_and_creates_pending_row() -> None:
     assert receipt.images[0].page_number == 1
     assert len(repo.created) == 1
     assert bucket.removed == []  # no cleanup on success
+
+
+async def test_upload_enqueues_ocr_processing() -> None:
+    bucket, repo, images, queue = _FakeBucket(), _FakeRepo(), _FakeImages(), _FakeQueue()
+    user = _user()
+    receipt = await _service(bucket, repo, images, queue).upload_receipt(
+        user=user, data=b"jpegbytes", content_type="image/jpeg"
+    )
+
+    # Exactly one processing job, for the receipt just created and its owner.
+    assert queue.enqueued == [(receipt.id, user.id)]
+
+
+async def test_upload_without_a_queue_does_not_enqueue() -> None:
+    # The queue is optional; a service built without one simply skips enqueueing.
+    bucket, repo, images = _FakeBucket(), _FakeRepo(), _FakeImages()
+    await _service(bucket, repo, images).upload_receipt(
+        user=_user(), data=b"jpegbytes", content_type="image/jpeg"
+    )  # no raise
+
+
+async def test_failed_upload_does_not_enqueue() -> None:
+    bucket, repo, queue = _FakeBucket(), _FakeRepo(), _FakeQueue()
+    with pytest.raises(RuntimeError, match="db down"):
+        await _service(bucket, repo, _FakeImages(fail=True), queue).upload_receipt(
+            user=_user(), data=b"jpegbytes", content_type="image/jpeg"
+        )
+    # A cleaned-up failed upload must not leave a phantom processing job.
+    assert queue.enqueued == []
 
 
 async def test_upload_cleans_up_object_when_image_insert_fails() -> None:

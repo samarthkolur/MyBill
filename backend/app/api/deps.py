@@ -19,6 +19,7 @@ from supabase import AsyncClient
 from app.core.config import Settings
 from app.core.exceptions import ServiceUnavailableError, UnauthorizedError
 from app.core.security import AuthenticatedUser, AuthError, JwtVerifier
+from app.integrations.tasks import CeleryTaskQueue
 from app.repositories.receipts import ReceiptImageRepository, ReceiptRepository
 from app.repositories.users import UserRepository
 from app.services.receipts import ReceiptService
@@ -95,9 +96,17 @@ UserServiceDep = Annotated[UserService, Depends(get_user_service)]
 def get_receipt_service(
     supabase: Annotated[AsyncClient, Depends(get_supabase)],
 ) -> ReceiptService:
-    """Provide a ``ReceiptService`` backed by the shared Supabase client."""
+    """Provide a ``ReceiptService`` backed by the shared Supabase client.
 
-    return ReceiptService(supabase, ReceiptRepository(supabase), ReceiptImageRepository(supabase))
+    Wired with the Celery queue so a successful upload enqueues OCR processing.
+    """
+
+    return ReceiptService(
+        supabase,
+        ReceiptRepository(supabase),
+        ReceiptImageRepository(supabase),
+        CeleryTaskQueue(),
+    )
 
 
 ReceiptServiceDep = Annotated[ReceiptService, Depends(get_receipt_service)]

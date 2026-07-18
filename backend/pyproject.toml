@@ -12,6 +12,7 @@ dependencies = [
     "supabase>=2.10,<3.0",
     "pyjwt[crypto]>=2.10,<3.0",
     "python-multipart>=0.0.18,<1.0",
+    "celery[redis]>=5.4,<6.0",
 ]
 
 # Additional dependencies (async SQLAlchemy, Alembic, Celery, Redis, Pillow,
@@ -86,6 +87,16 @@ disallow_untyped_defs = false
 [[tool.mypy.overrides]]
 module = ["rapidocr.*"]
 ignore_missing_imports = true
+
+# Celery ships no type stubs, so its decorators are untyped. Scoped to the worker module
+# (the only place that uses Celery directly) rather than relaxing decorator checks globally.
+[[tool.mypy.overrides]]
+module = ["celery.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["app.worker"]
+disallow_untyped_decorators = false
 
 # ---------------------------------------------------------------------------
 # Pytest

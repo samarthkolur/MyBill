@@ -26,16 +26,18 @@ ENV UV_COMPILE_BYTECODE=1 \
 WORKDIR /app
 
 # 1) Install ONLY third-party deps first (no project code) — cached until the lockfile
-#    or pyproject changes. --no-dev keeps test/lint tooling out of the runtime image.
+#    or pyproject changes. --no-dev keeps test/lint tooling out of the runtime image;
+#    --group ocr pulls in the OCR engine (onnxruntime + rapidocr) the worker needs. The
+#    same image serves the api and the worker, so both get it.
 RUN --mount=type=cache,target=/root/.cache/uv \
     --mount=type=bind,source=uv.lock,target=uv.lock \
     --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
-    uv sync --frozen --no-install-project --no-dev
+    uv sync --frozen --no-install-project --no-dev --group ocr
 
 # 2) Add the application and install the project itself into the venv.
 COPY . /app
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev
+    uv sync --frozen --no-dev --group ocr
 
 # ---------------------------------------------------------------------------
 # Runtime
