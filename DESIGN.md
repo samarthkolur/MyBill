@@ -119,9 +119,15 @@ for now (mirroring `MyBill.md` §13) and will be broken into tasks as we approac
   and parsed line items. Backed by `GET /receipts`, `GET /receipts/{id}` (expanded read
   model with parsed summary fields), and `GET /receipts/{id}/items` (categories resolved to
   names, low-confidence lines flagged). Review highlighting on items is done here.
+- ✅ **Search endpoint + search screen** — `GET /search/items` (name substring, embeds
+  store/date per hit); Flutter search screen with a debounced field, results link to the
+  source bill
 - ⬜ Inline item correction UI + `PATCH` endpoint
-- ⬜ Search endpoint + search screen
 - ⬜ Receipt soft-delete (low-confidence review highlighting landed with the detail screen)
+
+**Parser (v0.1.1):** item names now have leading HSN codes stripped and the weight/quantity
+carved into its own field via row arithmetic (unit_price × qty ≈ total) — verified across
+the live receipts.
 
 ## Phase 4 — Analytics & Charts (milestone-level)
 
