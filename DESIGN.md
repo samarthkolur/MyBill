@@ -101,10 +101,12 @@ for now (mirroring `MyBill.md` §13) and will be broken into tasks as we approac
   `process_receipt` task; a successful upload enqueues via the `TaskQueue` seam. Compose
   `worker` enabled; image installs the `ocr` group. **Not yet run in-container against live
   Redis + real OCR** (needs a docker build with ONNX model download).
+- ✅ **Processing status polling** — `GET /receipts/{id}` returns the receipt's status;
+  the Flutter processing screen (route `/processing/:receiptId`) polls it after a new-bill
+  upload, animating a "reading" state until done/failed with retry on timeout
 - ⬜ Image pre-processing service (resize, deskew, binarise) — slots in ahead of OCR
 - ⬜ **Store alias table (seed 20 chains)** — store resolution today matches within a user's
   own stores (space-insensitive aliases); a global known-chain seed is still to add
-- ⬜ Processing status polling endpoint + Flutter animated processing screen
 
 ## Phase 3 — Digital Bill Viewer (milestone-level)
 
