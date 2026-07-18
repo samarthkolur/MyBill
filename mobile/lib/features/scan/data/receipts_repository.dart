@@ -34,6 +34,24 @@ class ReceiptsRepository {
     CancelToken? cancelToken,
   }) => _post('/receipts/$receiptId/images', image, onProgress, cancelToken);
 
+  /// Fetch a single receipt by id — the processing-status poll.
+  ///
+  /// The processing screen calls this on an interval, reading [Receipt.status] until it
+  /// settles on `done` or `failed`.
+  Future<Receipt> get(String receiptId) async {
+    final response = await _dio.get<Map<String, dynamic>>(
+      '/receipts/$receiptId',
+    );
+    final data = response.data?['data'];
+    if (data is! Map<String, dynamic>) {
+      throw const ApiException(
+        code: 'bad_response',
+        message: 'The server returned an unexpected response.',
+      );
+    }
+    return Receipt.fromJson(data);
+  }
+
   /// The caller's receipts, newest first — the choices for "add to an existing bill".
   Future<List<Receipt>> list({int limit = 20}) async {
     final response = await _dio.get<Map<String, dynamic>>(

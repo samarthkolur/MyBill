@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
+import 'package:mybill/core/router/app_router.dart';
 import 'package:mybill/features/auth/presentation/widgets/auth_error_banner.dart';
 import 'package:mybill/features/scan/application/scan_controller.dart';
 import 'package:mybill/features/scan/data/image_pipeline.dart';
@@ -19,17 +21,20 @@ class ScanScreen extends ConsumerWidget {
     final controller = ref.read(scanControllerProvider.notifier);
 
     ref.listen<ScanState>(scanControllerProvider, (previous, next) {
-      if (previous?.stage != ScanStage.success &&
-          next.stage == ScanStage.success) {
-        final pages = next.receipt?.pageCount ?? 1;
+      if (previous?.stage == ScanStage.success ||
+          next.stage != ScanStage.success) {
+        return;
+      }
+      final receipt = next.receipt;
+      // A new bill goes straight to the processing screen to watch OCR run. Adding a page
+      // to an existing bill just confirms with a snackbar — that bill has its own flow.
+      if (next.target.isNewBill && receipt != null) {
+        controller.reset();
+        context.push(AppRoutes.processingFor(receipt.id));
+      } else {
+        final pages = receipt?.pageCount ?? 1;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              pages > 1
-                  ? 'Page $pages added to the bill.'
-                  : 'Receipt uploaded — processing will start soon.',
-            ),
-          ),
+          SnackBar(content: Text('Page $pages added to the bill.')),
         );
       }
     });

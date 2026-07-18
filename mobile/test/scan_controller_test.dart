@@ -87,6 +87,9 @@ class _FakeRepository implements ReceiptsRepository {
 
   @override
   Future<List<Receipt>> list({int limit = 20}) async => [_receipt('r1', 1)];
+
+  @override
+  Future<Receipt> get(String receiptId) async => _receipt(receiptId, 1);
 }
 
 ScanController buildController({
