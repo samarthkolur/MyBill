@@ -105,6 +105,19 @@ async def test_quantity_times_price_derives_missing_total() -> None:
     assert item.name == "PEPSI"
 
 
+async def test_implausibly_large_quantity_is_rejected() -> None:
+    # A product/HSN/barcode code that happens to end in a unit letter ("8901030 g") must not
+    # become the quantity — it would overflow the numeric(8,3) column and fail the receipt.
+    receipt = await _parse(
+        _line("SUGAR 8901030 g", x=20, row=0),
+        _line("55.00", x=320, row=0),
+    )
+
+    item = receipt.items[0]
+    assert item.quantity == Decimal("1")
+    assert item.unit is None
+
+
 async def test_weight_unit_is_extracted() -> None:
     receipt = await _parse(
         _line("SUGAR 1 kg", x=20, row=0),

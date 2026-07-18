@@ -37,6 +37,12 @@ logger = get_logger("app.parser")
 
 PARSER_VERSION = "heuristic-0.1.0"
 
+# Largest quantity we'll believe from a receipt line. A grocery quantity is small; a big
+# number sitting before a unit-ish token ("8901030 g") is a misread product/HSN/barcode
+# code, not a weight. Capping here also keeps quantity within the numeric(8,3) column
+# (< 10^5), so a misparse can't overflow the insert and fail the whole receipt.
+MAX_QUANTITY = Decimal(10000)
+
 # A money amount: an optional currency marker then digits with a 2-decimal fraction. The
 # decimals are required on purpose — an integer alone is indistinguishable from a quantity,
 # a date part, or an item code, and a receipt prints prices as `66.00`, not `66`. Thousands
@@ -412,7 +418,8 @@ def _row_to_item(text: str, confidence: float) -> CanonicalItem | None:
     #   `66.00`            → a single amount is both unit price and total, at quantity 1
     times = _QTY_TIMES_RE.search(text)
     if times:
-        quantity = _quantize_qty(Decimal(times.group(1)))
+        parsed_qty = _quantize_qty(Decimal(times.group(1)))
+        quantity = parsed_qty if _is_sane_quantity(parsed_qty) else Decimal(1)
         unit_price = _quantize_money(money[0])
         total_price = (
             _quantize_money(money[-1])
@@ -449,9 +456,18 @@ def _extract_quantity_unit(text: str) -> tuple[Decimal, str | None]:
     match = _UNIT_RE.search(text)
     if not match:
         return Decimal(1), None
+    quantity = _quantize_qty(Decimal(match.group(1)))
+    if not _is_sane_quantity(quantity):
+        # A number too large to be a real quantity means the unit token was a coincidence
+        # (a product/HSN code that happens to end in g/l/no) — drop it rather than trust it.
+        return Decimal(1), None
     unit = match.group(2).lower()
     unit = {"pc": "pcs", "no": "pcs", "nos": "pcs"}.get(unit, unit)
-    return _quantize_qty(Decimal(match.group(1))), unit
+    return quantity, unit
+
+
+def _is_sane_quantity(value: Decimal) -> bool:
+    return Decimal(0) < value <= MAX_QUANTITY
 
 
 def _normalise_name(name: str) -> str:
