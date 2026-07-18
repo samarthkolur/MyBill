@@ -96,9 +96,12 @@ for now (mirroring `MyBill.md` §13) and will be broken into tasks as we approac
   `receipts` + `receipt_items` + `price_history`: alias-aware store resolution, category
   name→id lookup, idempotent replace-by-receipt, receipt flipped to `done`. New
   repositories: `reference` (categories/stores), `parsed` (items/price_history)
-- ⬜ Image pre-processing service (resize, deskew, binarise)
-- ⬜ Celery + Redis async job queue — the orchestration that chains upload → preprocess →
-  OCR → parse → normalise; the four stage components now all exist, unwired
+- ✅ **Celery + Redis async job queue** — `ReceiptPipeline` chains OCR → parse → normalise
+  (multi-page receipts stacked into one document); `app/worker.py` is the Celery app +
+  `process_receipt` task; a successful upload enqueues via the `TaskQueue` seam. Compose
+  `worker` enabled; image installs the `ocr` group. **Not yet run in-container against live
+  Redis + real OCR** (needs a docker build with ONNX model download).
+- ⬜ Image pre-processing service (resize, deskew, binarise) — slots in ahead of OCR
 - ⬜ **Store alias table (seed 20 chains)** — store resolution today matches within a user's
   own stores (space-insensitive aliases); a global known-chain seed is still to add
 - ⬜ Processing status polling endpoint + Flutter animated processing screen
