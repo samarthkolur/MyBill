@@ -69,6 +69,11 @@ services:
     environment:
       REDIS_URL: redis://redis:6379/0
     command: ["celery", "-A", "app.worker", "worker", "--loglevel=info"]
+    # Live source for local dev (mirrors `api`): mount the app package so a code change is
+    # picked up on `docker compose restart worker`, without rebuilding the image. Celery
+    # doesn't auto-reload, so a restart is the trigger.
+    volumes:
+      - ../backend/app:/app/app:ro
     # Override the image's HTTP healthcheck (that's the api's) — a Celery worker serves no
     # HTTP. Liveness is "does the worker answer a broker ping".
     healthcheck:
