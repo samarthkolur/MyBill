@@ -77,6 +77,26 @@ class ReceiptRepository:
         )
         return cast("list[dict[str, Any]]", resp.data or [])
 
+    async def update_fields(
+        self, *, receipt_id: UUID, user_id: UUID, fields: dict[str, Any]
+    ) -> dict[str, Any] | None:
+        """Patch a receipt owned by ``user_id`` and return the updated row, or None.
+
+        Used by the OCR pipeline to fill the parsed columns (store, date, totals, status)
+        once processing completes. Scoped by ``user_id`` as well as ``id`` so a system-role
+        write can never touch another user's receipt.
+        """
+
+        resp = (
+            await self._client.table(_TABLE)
+            .update(cast("Any", fields))
+            .eq("id", str(receipt_id))
+            .eq("user_id", str(user_id))
+            .execute()
+        )
+        rows = cast("list[dict[str, Any]]", resp.data or [])
+        return rows[0] if rows else None
+
     async def delete(self, *, receipt_id: UUID) -> None:
         """Remove a receipt row. Its images cascade via the FK."""
 
