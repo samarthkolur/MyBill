@@ -49,7 +49,6 @@ dependencies:
   flutter_image_compress: ^2.5.0
   path_provider: ^2.1.5
   http_parser: ^4.1.2
-  google_fonts: ^8.1.0
 
 dev_dependencies:
   flutter_test:
@@ -90,22 +89,21 @@ flutter:
   # For details regarding adding assets from package dependencies, see
   # https://flutter.dev/to/asset-from-package
 
-  # To add custom fonts to your application, add a fonts section here,
-  # in this "flutter" section. Each entry in this list should have a
-  # "family" key with the font family name, and a "fonts" key with a
-  # list giving the asset and other descriptors for the font. For
-  # example:
-  # fonts:
-  #   - family: Schyler
-  #     fonts:
-  #       - asset: fonts/Schyler-Regular.ttf
-  #       - asset: fonts/Schyler-Italic.ttf
-  #         style: italic
-  #   - family: Trajan Pro
-  #     fonts:
-  #       - asset: fonts/TrajanPro.ttf
-  #       - asset: fonts/TrajanPro_Bold.ttf
-  #         weight: 700
-  #
-  # For details regarding fonts from package dependencies,
-  # see https://flutter.dev/to/font-from-package
+  # Bundled fonts (self-contained, no runtime download): Oswald for titles,
+  # Poppins for body text — paired in lib/core/theme/app_theme.dart. Downloaded
+  # from Google Fonts (SIL Open Font License; licenses kept alongside the files
+  # in assets/fonts/). Oswald ships as one variable font whose weight axis covers
+  # the title tiers; Poppins is bundled as discrete weights.
+  fonts:
+    - family: Oswald
+      fonts:
+        - asset: assets/fonts/Oswald-Variable.ttf
+    - family: Poppins
+      fonts:
+        - asset: assets/fonts/Poppins-Regular.ttf
+        - asset: assets/fonts/Poppins-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Poppins-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Poppins-Bold.ttf
+          weight: 700
